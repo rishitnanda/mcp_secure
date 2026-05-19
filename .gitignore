@@ -1,0 +1,37 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Databases & Telemetry logs
+*.db
+*.db-wal
+*.db-shm
+*.log
+
+# Secrets & local certificate keys
+*.secrets
+.secrets
+*.key
+
+# Unit test / coverage reports
+.pytest_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Node / frontend builds
+node_modules/
+dist/
+
+# OS Files
+.DS_Store
+Thumbs.db
