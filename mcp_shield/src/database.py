@@ -12,8 +12,11 @@ class DatabaseManager:
     async def init_db(self):
         """Initializes the database schema and sets performance pragmas."""
         try:
+            # We connect dynamically per operation to support concurrent handles
             async with aiosqlite.connect(self.db_path) as db:
+                # WAL allows concurrent reads and writes without lock exception crashes
                 await db.execute("PRAGMA journal_mode=WAL;")
+                # NORMAL reduces sync cycles without compromising write durability in WAL mode
                 await db.execute("PRAGMA synchronous=NORMAL;")
                 await db.execute(
                     """
@@ -74,6 +77,7 @@ class DatabaseManager:
         Returns the asyncio Task to allow waiting in tests, but in production 
         this is called without awaiting to keep the hot path non-blocking.
         """
+        # Fire-and-forget task registration to avoid slowing request proxy pathways
         task = asyncio.create_task(
             self._write_log(request_id, method, payload, status, duration_ms, exit_code, server_id)
         )
