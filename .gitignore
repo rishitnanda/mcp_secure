@@ -35,3 +35,7 @@ dist/
 # OS Files
 .DS_Store
 Thumbs.db
+.~lock.*
+
+# Keep locally but ignore on git
+phase_0/

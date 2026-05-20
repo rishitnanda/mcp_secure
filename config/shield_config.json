@@ -23,6 +23,11 @@
       "regex_blacklist": [],
       "allowed_tools": ["execute_code", "run_python"],
       "sampling_allowed": true
+    },
+    "adversarial-server": {
+      "regex_blacklist": [],
+      "allowed_tools": ["trigger_injection", "escalate_sampling"],
+      "sampling_allowed": false
     }
   },
   "ast_policy": {

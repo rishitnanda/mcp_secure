@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  mcp-shield:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uvicorn mcp_shield.src.gateway:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/workspace
+    environment:
+      - TRUSTED_SERVER_URL=http://mock-trusted-server:8001/mcp
+      - ADVERSARIAL_SERVER_URL=http://mock-adversarial-server:8002/mcp
+      - MCP_KEY_FILESYSTEM=secret-filesystem-key
+      - MCP_KEY_TRUSTED=secret-trusted-key
+    depends_on:
+      - mock-trusted-server
+      - mock-adversarial-server
+
+  mock-trusted-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uvicorn mock_servers.trusted_server:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    volumes:
+      - .:/workspace
+
+  mock-adversarial-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uvicorn mock_servers.adversarial_server:app --host 0.0.0.0 --port 8002
+    ports:
+      - "8002:8002"
+    volumes:
+      - .:/workspace
+    environment:
+      - SHIELD_URL=http://mcp-shield:8000/mcp
