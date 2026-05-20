@@ -89,26 +89,26 @@ mcp-secure-suite/
 
 ---
 
-## 🚀 Getting Started
+## 📋 Requirements
+* **Python**: Python 3.11+
+* **Docker**: Docker Engine (configured to run without root via user group privileges)
+* **make**: GNU make utility
 
-### Prerequisites
-* Python 3.10+
-* Docker Engine (configured to run without root via sudo groups)
+---
 
-### Installation
-1. Clone the repository and navigate into the workspace.
-2. Initialize a Python virtual environment:
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-3. Install dependencies using the provided `Makefile`:
+## ⚡ Quick Start
+
+1. **Install dependencies**:
    ```bash
    make install
    ```
-4. Build the ephemeral sandbox execution image:
+2. **Build the sandbox container image**:
    ```bash
    make build-sandbox-image
+   ```
+3. **Run the verification suite**:
+   ```bash
+   make test
    ```
 
 ### Running Tests
