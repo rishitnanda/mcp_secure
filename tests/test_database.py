@@ -42,7 +42,7 @@ async def test_db_happy_path(temp_db_path):
 @pytest.mark.asyncio
 async def test_db_unavailable_fails_gracefully():
     # An invalid directory path that will cause write failures
-    invalid_path = "/nonexistent_dir_12345/telemetry.db"
+    invalid_path = "/nonexistent/path/telemetry.db"
     db_mgr = DatabaseManager(invalid_path)
 
     # init_db raises because it is a critical startup task

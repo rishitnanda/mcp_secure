@@ -34,12 +34,12 @@ class JSONRPCResponse(BaseModel):
 
     @model_validator(mode="after")
     def check_result_xor_error(self) -> "JSONRPCResponse":
-        is_result_set = "result" in self.model_fields_set
-        is_error_set = "error" in self.model_fields_set
+        has_result = self.result is not None
+        has_error = self.error is not None
 
-        if is_result_set and is_error_set:
+        if has_result and has_error:
             raise ValueError("JSON-RPC response cannot contain both result and error members")
-        if not is_result_set and not is_error_set:
+        if not has_result and not has_error:
             raise ValueError("JSON-RPC response must contain either result or error member")
         return self
 
@@ -80,10 +80,20 @@ class MCPSecHeader(BaseModel):
             raise ValueError("timestamp must be positive")
         return v
 
+VALID_STAGES = {"regex", "ast", "namespace", "attestation", "hmac", "sanitizer", "passed"}
+
 class PolicyResult(BaseModel):
     allowed: bool
     reason: str
     stage: str
+
+    @field_validator("stage")
+    @classmethod
+    def check_stage(cls, v: str) -> str:
+        if v not in VALID_STAGES:
+            raise ValueError(f"stage must be one of {VALID_STAGES}")
+        return v
+
 
 class ExecutionContext(BaseModel):
     code: str

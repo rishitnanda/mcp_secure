@@ -48,8 +48,6 @@ class DatabaseManager:
         """Background worker to perform the actual write."""
         try:
             async with aiosqlite.connect(self.db_path) as db:
-                await db.execute("PRAGMA journal_mode=WAL;")
-                await db.execute("PRAGMA synchronous=NORMAL;")
                 await db.execute(
                     """
                     INSERT INTO logs (id, timestamp, method, payload, status, duration_ms, exit_code, server_id)
