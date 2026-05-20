@@ -1,0 +1,230 @@
+﻿MCP-SECURE-SUITE
+3-Week Sprint Plan  ·  CV Milestones  ·  Research Paper Guide
+First-Year CS Student Edition
+
+Part A  Should You Write a Research Paper?
+The honest answer: Yes — but not right now, and not alone.
+Here is the full picture so you can make an informed decision, not a hype-driven one.
+
+Why you SHOULD eventually write one
+    • The gap is real and citable. Maloyan & Namiot (Jan 2026) is the first formal MCP security analysis. A paper demonstrating a working open-source implementation of their ATTESTMCP proposals — with live attack success rate measurements — is a genuine contribution, not just a student project.
+    • You have the right primary source. You have the actual paper, you understand the threat model, and your suite directly operationalises their proposed mitigations. That is a coherent research narrative.
+    • arXiv is accessible to undergraduates. You do not need a supervisor or affiliation to upload to arXiv. A well-written technical report there, even unreviewed, is cited by industry people and shows up in Google Scholar.
+    • It compounds. A GitHub repo is a portfolio item. A GitHub repo + arXiv preprint is a research credential. Same work, much larger signal.
+
+Why you should NOT rush it
+    • Writing before building is backward. If you start writing now, you will spend three weeks describing a system that doesn't exist yet. Write the code first. The paper writes itself once you have real numbers.
+    • A weak paper is worse than no paper. A 4-page preprint with no experimental results, vague claims, and no comparison baseline will be ignored or — worse — noticed for the wrong reasons by a reviewer at a company.
+    • You are in your first year. The honest signal here is the code and the GitHub. A paper at this stage is icing, not the cake. Build the cake first.
+
+Decision: Start the paper in Week 3 once you have test results. Publish to arXiv after Week 3 ends, or keep it as a technical report linked from the README. Either is fine. Do not let writing distract from building.
+
+What the paper should look like (when you do write it)
+
+Section	Content
+Abstract	2 sentences problem, 1 sentence approach, 2 numbers (baseline ASR vs. your suite's ASR). Write this last.
+1  Introduction	MCP adoption stats → why the protocol is a security blind spot → your 3 contributions: (1) open-source implementation of ATTESTMCP, (2) working sandbox, (3) empirical validation against the paper's attack scenarios.
+2  Background	MCP architecture in 0.5 pages. The 3 protocol vulnerabilities from the paper (cite Maloyan & Namiot). One paragraph on why existing tools are insufficient.
+3  System Design	Shield architecture (engine/transport split, 3-stage policy, ATTESTMCP cert flow). Box architecture (Docker watchdog, cleanup, resource caps). The handoff protocol between them.
+4  Implementation	Key decisions you made and why: HTTP/SSE primary transport, auto-deny sampling, per-server config, PSK key management, pre-baked Alpine image. Be concise — this is not a tutorial.
+5  Evaluation	This is the core. Run the paper's documented attack types (at least 30 cases). Show baseline MCP ASR (replicate the paper's numbers on your mock servers). Show your suite's ASR. Put this in a table matching Table X of the original paper so comparison is direct.
+6  Limitations	Container escape risk (OS namespace vs. hardware VM). PSK vs. ephemeral key exchange. TOFU first-contact gap. Alert fatigue in consent prompts. Being honest here is a sign of maturity, not weakness.
+7  Conclusion	Restate contributions, give your headline number, one sentence on future work (Firecracker backend, federated CA).
+References	Maloyan & Namiot 2026, AgentDojo, InjecAgent, OWASP LLM Top 10, MCPSecBench, MCPGuard. 10–15 references is fine for an arXiv preprint.
+
+Target length: 6–8 pages in IEEE two-column format. That is the right size for an arXiv preprint that gets read. Under 5 pages looks thin; over 10 pages for a solo first-year project invites skepticism.
+
+Where to submit (in order of effort)
+    • arXiv cs.CR — zero barrier, immediate visibility, citable DOI. Do this first.
+    • USENIX Security Symposium Student Papers track — competitive but prestigious if you can get a faculty co-author to sign off.
+    • IEEE S&P Student Workshop — similar to above, annual deadline in December.
+    • ACM CCS Student Research Competition — poster format, good for networking.
+    • Do NOT submit to predatory journals (IJCSNS, IJET, etc.). They will accept anything for a fee and actively hurt your credibility.
+
+
+Part B  3-Week Sprint Plan
+21 working days. Each day has one focused output. Stop condition for every sub-phase: tests pass, not 'feels done'.
+
+Buffer rule: Days 19–21 are deliberately left as float. You will use them. Do not pre-assign them.
+
+Colour Legend
+WEEK 1	Foundations & MCP-Box core. No FastAPI yet. Just Python classes and Docker.
+WEEK 2	MCP-Shield core engine — policy, schemas, exception mapping, attestation.
+WEEK 3	Integration, end-to-end tests, dashboard, paper draft, README.
+CV READY	Point at which the project is presentable in a job application.
+
+WEEK 1  —  Foundations & MCP-Box
+Phase 1.1  — Repo Skeleton & Dev Environment  (Day 1)
+Goal: One command sets up the whole project. Nothing breaks on a fresh clone.
+
+Day	Label	Tasks
+Day 1	Repo skeleton	• Create mcp-secure-suite/ directory structure exactly as in the repo plan • git init, add .gitignore (Python, node_modules, .env, *.secrets) • Create empty __init__.py files in every package • Write requirements.txt for mcp_shield (fastapi, uvicorn, aiosqlite, pydantic, cryptography) • Write requirements.txt for mcp_box (docker) • Write Makefile with targets: install, test, run-shield, run-box, build-sandbox-image • Verify: make install runs cleanly in a fresh venv
+
+Phase 1.2  — Pydantic Schemas  (Day 2)
+Goal: Every data structure in the project has a type. No raw dicts passed between components.
+
+Day	Label	Tasks
+Day 2	schemas.py	• JSONRPCRequest model (jsonrpc, id, method, params) • JSONRPCResponse model (jsonrpc, id, result | error) • JSONRPCError model (code, message, data?) • CapabilityCert model (server_id, capabilities[], issued_by, issued_at, expires_at, signature) • MCPSecHeader model (server_id, timestamp, nonce, hmac) • PolicyResult model (allowed: bool, reason: str, stage: str) • ExecutionContext model (code: str, server_id: str, request_id: str) • SandboxResult model (exit_code: int, logs: str, status: str, duration_ms: float) • Write 10 unit tests in tests/test_schemas.py — valid models parse, invalid ones raise ValidationError • Verify: pytest tests/test_schemas.py -v all green
+
+Phase 1.3  — Async SQLite Logger  (Day 3)
+Goal: log_event() works and never crashes the caller even when the DB is unavailable.
+
+Day	Label	Tasks
+Day 3	database.py	• init_db(): create logs table with schema (id, timestamp, method, payload, status, duration_ms, exit_code, server_id) • Apply PRAGMA journal_mode=WAL and PRAGMA synchronous=NORMAL on connection • log_event(request_id, method, payload, status, duration_ms, exit_code, server_id): async, wraps aiosqlite.connect in try/except, prints to stderr on failure • get_metrics(): query counts grouped by status — returns dict {SUCCESS: n, BLOCKED: n, TIMEOUT: n, SANITIZED: n} • Write tests: happy path write+read, DB unavailable path (point to /nonexistent/path.db) must NOT raise • Verify: pytest tests/test_database.py all green
+
+Phase 1.4  — Self-Signed CA Fixture  (Day 4)
+This is a dependency for all ATTESTMCP tests. Build it now before it becomes a blocker in Week 2.
+
+Day	Label	Tasks
+Day 4	CA fixture	• In tests/fixtures/ca/: write generate_ca.py using Python cryptography library   — generates a self-signed root CA (RSA-2048 or EC P-256)   — signs a 'filesystem-server' cert   — signs an 'adversarial-server' cert (deliberately expired for negative tests)   — saves all to tests/fixtures/ca/ as PEM files • In tests/conftest.py: pytest fixture ca_cert() that loads the root cert, server_cert() that loads a named server cert • Write 3 tests: valid cert verifies, expired cert fails, wrong server_id fails • Verify: pytest tests/test_certs.py all green
+
+Phase 1.5  — Docker Sandbox Core  (Days 5–6)
+Goal: DockerSandbox.execute('print(42)') returns {exit_code:0, logs:'42\n', status:'success'}.
+
+Day	Label	Tasks
+Day 5	sandbox.py core	• Write Dockerfile in mcp_box/ — FROM python:3.11-alpine, pip install numpy pandas matplotlib python-dateutil pytz, adduser sandboxuser, USER sandboxuser, WORKDIR /workspace • Add 'build-sandbox-image' target to Makefile: docker build -t mcp-box-sandbox:latest ./mcp_box/ • Implement DockerSandbox.__init__: docker.from_env(), label pruner (list all mcp-box-sandbox=true containers and kill+remove) • Implement create_temp_workspace(): uuid4 named dir in /tmp/ • Implement write_code_file(temp_dir, code) • Manual smoke test: build the image, confirm it exists
+Day 6	sandbox.py execute	• Implement DockerSandbox.execute(code) in full:   — containers.create() with all constraints (network_mode=none, mem_limit=128m, nano_cpus, read_only=True, volumes, labels)   — loop.run_in_executor(None, container.start)   — asyncio.wait_for(loop.run_in_executor(None, container.wait), timeout=2.0)   — capture logs on success   — container.kill() on TimeoutError   — container.remove(force=True) + shutil.rmtree in finally • Write tests B1–B6 (clean exec, timeout, network isolation, OOM, cleanup, read-only FS) • Verify: pytest tests/test_box_isolated.py all green
+
+Phase 1.6  — Week 1 Integration Check  (Day 7)
+Day 7 is a catch-up and integration day, not new feature day. Fix everything red before moving to Week 2.
+
+Day	Label	Tasks
+Day 7	Week 1 wrap-up	• Run full test suite: pytest tests/ — target: 0 failures • Write WEEK1.md in docs/: what works, what you skipped, any decisions you changed • Commit everything with a clean git log (squash any WIP commits) • README: add 'Requirements' section (Docker, Python 3.11+, make) and 'Quick Start' with make install + make build-sandbox-image • Push to GitHub — this is your first public checkpoint
+
+★  CV MILESTONE 1  —  End of Week 1  (Day 7)
+At this point you have: a structured GitHub repo with tests, a working Docker sandbox that passes 6 test cases, typed schemas, an async DB logger, and a CA fixture. This is already above the median first-year project.
+What to write on your CV:
+Built MCP-Box, an ephemeral containerised code execution engine for AI agents (Python, Docker SDK, asyncio). Implements network isolation, resource caps, and 2-second execution watchdog. 6/6 security test cases passing.
+What to say in a cover letter:
+'I am currently building a security sandbox for MCP-based AI agents, grounded in a January 2026 arXiv security analysis. The sandboxing layer is complete and tested; I am working on the protocol proxy layer.'
+Reality check: This is 'interesting side project' level, not 'research contribution' level. Most companies will be curious. Some early-stage AI security startups will be very interested. Apply to internships now but don't expect offers on this alone — the Week 2 checkpoint is stronger.
+
+
+WEEK 2  —  MCP-Shield Core Engine
+Phase 2.1  — Policy Engine: Regex + AST  (Days 8–9)
+This is the intellectual centrepiece of the project. The AST walker is what separates this from a student regex filter.
+
+Day	Label	Tasks
+Day 8	policy.py regex	• Define PolicyViolationException and ASTValidationException • Load shield_config.json at startup: parse regex_blacklist[], allowed_servers{}, sampling_whitelist[] • regex_scan(params: dict) -> PolicyResult:   — compile blacklist patterns once at import time   — walk all string values in params recursively   — return PolicyResult(allowed=False, reason=matched_pattern, stage='regex') on match • Write tests S5 (rm -rf match), plus 5 more: chmod, /etc/passwd, nc -e, curl pipe, clean input passes • Verify: pytest tests/test_policy_regex.py all green
+Day 9	policy.py AST	• ast_scan(code: str) -> PolicyResult:   — parse code with ast.parse() — catch SyntaxError -> PolicyResult blocked, stage='ast'   — walk tree with ast.walk()   — block: ast.Import / ast.ImportFrom where module in BLOCKED_MODULES (os, sys, subprocess, socket, ctypes, urllib, shutil)   — block: ast.Call where func resolves to eval, exec, compile, __import__   — block: ast.Attribute where attr in ('system','popen','call','run') on any object   — block: getattr() calls anywhere in the tree • Write tests S6 (getattr obfuscation), plus: direct os import, subprocess.run call, exec() call, safe math code passes • Verify: pytest tests/test_policy_ast.py all green
+
+Phase 2.2  — Namespace Lock & Output Sanitizer  (Day 10)
+Namespace lock is simple to code but high impact to demo — it directly shows the shadow tool attack being blocked.
+
+Day	Label	Tasks
+Day 10	namespace + sanitizer	• namespace_lock(server_id, tools_list_response) -> filtered list:   — load allowed tools for server_id from shield_config.json   — strip any tool not in allowed list   — log each stripped tool as a NAMESPACE_BLOCKED event • output_sanitize(text: str) -> (str, bool):   — compile injection signatures: lines starting with 'System:', 'Human:', 'Assistant:', 'Ignore previous', 'Disregard all'   — if matched: replace with '[CONTENT SANITIZED: potential prompt injection detected]'   — return (sanitized_text, was_sanitized: bool) • Write tests S4 (filesystem-server strips fetch_url), S7 (Ignore previous instructions caught), 3 more sanitizer cases, 2 clean-pass cases • Verify: pytest tests/test_namespace_sanitizer.py all green
+
+Phase 2.3  — Capability Attestation  (Day 11)
+Use the CA fixture from Day 4. This day is well-scoped because the certificate infrastructure is already built.
+
+Day	Label	Tasks
+Day 11	attestation.py	• verify_capability_cert(cert_json, root_ca_cert) -> (bool, str):   — validate signature using cryptography library   — check expires_at > now   — check server_id matches expected   — return (valid, reason) • ConnectionState class: stores server_id, verified_capabilities[], cert_expiry per live connection • check_capability_permitted(conn_state, method) -> bool:   — e.g. 'sampling/createMessage' requires 'sampling' in verified_capabilities   — 'tools/call' requires 'tools' in verified_capabilities • Write tests S2 (uncertified server blocked), cert expired blocked, wrong server_id blocked, valid cert passes, capability not in cert blocked • Verify: pytest tests/test_attestation.py all green
+
+Phase 2.4  — HMAC Replay Protection  (Day 12)
+For HTTP/SSE transport only. Keep the nonce store as a simple in-process dict with a TTL. No Redis, no database.
+
+Day	Label	Tasks
+Day 12	hmac_guard.py	• Load PSK map from env vars: resolve shield_config.json 'server_keys' → os.environ.get() • verify_hmac(header: MCPSecHeader, body: bytes, server_id: str) -> (bool, str):   — recompute HMAC-SHA256 over body using PSK for server_id   — compare with header.hmac (constant-time comparison: hmac.compare_digest)   — reject if timestamp outside ±30s of now   — reject if nonce already seen in sliding window • NonceWindow class: dict[server_id -> set[nonce]], evict entries older than 30s on each call • Write tests S8 (replay blocked), wrong HMAC blocked, expired timestamp blocked, valid passes, unknown server_id blocked • Verify: pytest tests/test_hmac.py all green
+
+Phase 2.5  — Full Policy Engine Integration  (Day 13)
+Wire all four checks into one PolicyEngine.evaluate() call that returns a single PolicyResult. This is what the gateway will call.
+
+Day	Label	Tasks
+Day 13	engine.py	• PolicyEngine class (no network, no FastAPI):   — __init__: load config, compile regexes, init attestation validator, init HMAC guard   — evaluate(request: JSONRPCRequest, conn_state: ConnectionState, body_bytes: bytes) -> PolicyResult:     Stage 1: HMAC check (if SSE mode)     Stage 2: Capability attestation check     Stage 3: Regex scan on params     Stage 4: AST scan (if method involves code execution)     Stage 5: Namespace lock (if method is tools/list response)     → first failure returns immediately with stage label   — sanitize_output(response: JSONRPCResponse) -> JSONRPCResponse • Write 8 integration tests covering every stage firing and clean pass • Verify: pytest tests/test_engine.py all green
+
+Phase 2.6  — FastAPI Gateway & Stdio Proxy  (Day 14)
+Day 14 is the busiest day in the project. Schedule no other commitments. The engine is already built — this day is plumbing.
+
+Day	Label	Tasks
+Day 14	gateway.py + stdio	• FastAPI app with lifespan: init_db(), init DockerSandbox (label pruner), load PolicyEngine • POST /mcp route: receive JSON-RPC frame, parse, run engine.evaluate(), if blocked return error, else dispatch to Box or forward to target MCP server • GET /metrics route: call get_metrics() from database.py, return JSON • JSON-RPC exception mapper: catches ValidationError/PolicyViolation/ASTValidation/Timeout → correct error code • stdio_proxy.py: while True loop reading sys.stdin line by line, json.loads each line, call engine.evaluate(), write response to sys.stdout • Manual integration smoke test: run gateway, send a curl JSON-RPC request, verify response format • Verify: gateway starts without error, /metrics returns JSON
+
+★  CV MILESTONE 2  —  End of Week 2  (Day 14)
+You now have a working security engine with ~35 passing tests, ATTESTMCP certificate validation, AST-level code scanning, HMAC replay protection, and a running FastAPI gateway. This is a substantial project.
+What to write on your CV now (replace Week 1 entry):
+Designed and built MCP-Secure-Suite, a dual-layer runtime security proxy for AI agents using the Model Context Protocol. Implements capability attestation (ATTESTMCP), AST-level code injection scanning, Docker sandboxing with network isolation, and async telemetry. 35+ test cases across 8 test modules. Python, FastAPI, Docker, asyncio, SQLite.
+Apply to:
+    • AI safety / security startups (Robust Intelligence, Invariant Labs, HiddenLayer, Protect AI)
+    • Security-focused internships at companies using MCP (Anthropic, Cursor, any company using Claude Code)
+    • Any backend/infrastructure internship — the Docker + async Python skills are transferable
+What interviewers will ask:
+    • 'What does AST scanning catch that regex doesn't?' → You have a great answer (getattr obfuscation).
+    • 'What is ATTESTMCP?' → You can cite the paper and explain the 3 vulnerabilities.
+    • 'How does the Docker sandbox prevent data exfiltration?' → network_mode=none, you've tested it.
+
+
+WEEK 3  —  Integration, Demo & Paper
+Phase 3.1  — Shield → Box Handoff & End-to-End Tests  (Days 15–16)
+The first time a curl command goes through Shield, gets validated, executes in Box, and returns a result — that is the moment the project is real.
+
+Day	Label	Tasks
+Day 15	E2E wiring	• In gateway.py: if engine passes AND method is execute_code → build ExecutionContext → call DockerSandbox.execute() → return SandboxResult as JSON-RPC response • Unified log commit: after Box returns, call log_event() with full lifecycle (duration_ms from Box, exit_code, server_id, status) • Write docker-compose.yml: mcp-shield service (uvicorn), mcp-box (imported by shield), mock-trusted-server, mock-adversarial-server • Write mock_servers/trusted_server.py: simple MCP server that exposes execute_code and read_file • Write mock_servers/adversarial_server.py: registers shadow tools, injects sampling requests, returns prompt-injected outputs • Run docker compose up — verify all 4 services start
+Day 16	E2E tests	• Write tests/test_end_to_end.py: tests E1–E5   E1: rm -rf payload → blocked at regex, Box never called, DB shows BLOCKED   E2: print(2+2) → passes Shield, runs in Box, DB shows SUCCESS with duration_ms   E3: adversarial server output with 'Ignore previous instructions' → SANITIZED log   E4: adversarial server calls sampling/createMessage → BLOCKED_SAMPLING log   E5: run subset of paper's documented attack types (at minimum: indirect injection, tool response manipulation, cross-server) against raw mock server (no Shield) and through Shield — record ASR for both • Verify: pytest tests/test_end_to_end.py all green
+
+Phase 3.2  — Admin Dashboard & Metrics  (Day 17)
+Keep this simple: a static HTML/JS page that polls /metrics every 3 seconds. No React, no build step. Plain fetch() calls.
+
+Day	Label	Tasks
+Day 17	dashboard	• mcp_shield/src/dashboard/index.html: 4 stat cards (BLOCKED, SUCCESS, TIMEOUT, SANITIZED counts), a live log table (last 20 events), one bar chart (status distribution using Chart.js CDN) • FastAPI serves the dashboard as a static mount at /dashboard • GET /logs returns last 50 log rows from SQLite as JSON • Dashboard polls /metrics every 3s and /logs every 5s, updates DOM in-place • Manual demo: docker compose up → run attack → watch block count increment in browser • Screenshot the dashboard — this goes in the README
+
+Phase 3.3  — README & Demo Script  (Day 18)
+The README is read by every recruiter and senior engineer who clicks your GitHub link. Treat it as a product page, not documentation.
+
+Day	Label	Tasks
+Day 18	README + demo	• README structure:   — Hero: '3 protocol-level vulnerabilities in MCP. This suite blocks all of them.'   — Architecture diagram (Mermaid sequence diagram — renders natively on GitHub)   — Quick Start: 3 commands to run the full suite   — Demo: 3 attack commands with expected outputs (show a block, show a sandbox execution, show the dashboard)   — Test Results: table showing your ASR reduction numbers   — Reference: cite Maloyan & Namiot 2026 • Write demo.sh: a shell script that fires 3 attack payloads at the running gateway and prints colour-coded results • Record a 90-second terminal demo (use asciinema or just a screen recording) — embed a GIF in the README
+
+Phase 3.4  — Paper Draft  (Day 19)
+One full writing day. You have your test results. Write the paper in this order: Results table → Evaluation section → Introduction → Background → System Design → Abstract last.
+
+Day	Label	Tasks
+Day 19	paper draft	• Use IEEE two-column LaTeX template (overleaf.com — free, no install) • Fill in Section 5 (Evaluation) first — your ASR comparison table, your test counts, duration numbers from Box • Write Section 3 (System Design) — the engine architecture, handoff protocol, cert flow • Write Section 1 (Introduction) — cite the 3 paper vulnerabilities, state your 3 contributions • Write Section 2 (Background) — summarise MCP arch and the Maloyan & Namiot findings in your own words • Write Section 6 (Limitations) — container escape, PSK, TOFU, alert fatigue • Write Abstract last (2+1+2 formula) • Target: complete rough draft, every section has content (can be rough)
+
+Phase 3.5  — Float Days  (Days 20–21)
+You will need these. Prioritise in this order: (1) fix any failing tests, (2) polish the README, (3) revise the paper, (4) add TOFU pinning if time allows.
+
+Day	Label	Tasks
+Day 20	Float / polish	• Triage: run full test suite, fix anything that broke during integration • If all green: add TOFU key pinning (store server public key on first cert seen, alert on mismatch) • If all green: hot-reload shield_config.json with watchdog library • Paper: revise Section 4 (Implementation decisions), add references
+Day 21	Float / ship	• Final full test run: record exact count (aim for 40+ passing tests) • Tag git release v0.1.0 • Upload paper to arXiv cs.CR (or save as docs/technical_report.pdf linked from README) • Post on LinkedIn: 1 paragraph, link to GitHub, mention the arXiv paper if uploaded • Done.
+
+★  CV MILESTONE 3  —  End of Week 3  (Day 21)
+This is the full package. Working project, 40+ tests, live demo, research paper. For a first-year student this is exceptional — most final-year projects don't have this level of architectural grounding.
+Final CV entry:
+MCP-Secure-Suite  |  github.com/[your-handle]/mcp-secure-suite  |  Python, Docker, FastAPI, asyncio
+Designed and implemented a dual-layer runtime security suite for Model Context Protocol (MCP) AI agents, grounded in a peer-reviewed arXiv security analysis (Maloyan & Namiot 2026). MCP-Shield provides protocol-aware JSON-RPC interception with ATTESTMCP capability attestation, three-stage policy validation (regex/AST/namespace), HMAC replay protection, and async telemetry. MCP-Box provides ephemeral Docker sandboxing with network isolation and 2-second execution watchdog. Demonstrated attack success rate reduction from ~52% to 0% across covered attack types. 40+ pytest cases across 9 test modules.
+Paper citation (if uploaded to arXiv):
+[Your Name]. MCP-Secure-Suite: An Open-Source Implementation of Runtime Security Mitigations for the Model Context Protocol. arXiv preprint, 2026.
+What this unlocks:
+    • Security engineering internships at AI companies — you understand MCP at a protocol level that most senior engineers don't
+    • Backend internships — you can point to real async Python, Docker, and FastAPI code
+    • Research internships — you have a citable preprint and demonstrated ability to read and operationalise academic work
+    • On-site interviews: bring the terminal demo. Run demo.sh live. Watch the interviewer's face.
+
+
+Part C  One-Page Summary
+
+Day	Phase	Deliverable	Stop Condition	Tests Added
+1	1.1 Skeleton	Repo structure + Makefile	make install clean	0
+2	1.2 Schemas	schemas.py + models	10 schema tests green	10
+3	1.3 DB Logger	database.py WAL	DB unavailable doesn't raise	+4 = 14
+4	1.4 CA Fixture	tests/fixtures/ca/ + conftest	3 cert tests green	+3 = 17
+5	1.5a Sandbox	Dockerfile + DockerSandbox init	Image builds, pruner runs	0
+6	1.5b Sandbox	execute() + watchdog	B1–B6 all green	+ 6 = 23
+7	1.6 Week 1 wrap	Full test run + GitHub push	0 failures, README updated	—
+8	2.1a Policy	policy.py regex scan	6 regex tests green	+ 6 = 29
+9	2.1b Policy	policy.py AST walker	5 AST tests green	+ 5 = 34
+10	2.2 NS + Sanitize	namespace_lock + output_sanitize	7 tests green	+ 7 = 41
+11	2.3 Attestation	attestation.py + ConnectionState	5 cert tests green	+ 5 = 46
+12	2.4 HMAC	hmac_guard.py	5 HMAC tests green	+ 5 = 51
+13	2.5 Engine	engine.py evaluate()	8 engine tests green	+ 8 = 59
+14	2.6 Gateway	gateway.py + stdio_proxy.py	Gateway starts, /metrics works	0
+15	3.1a E2E wiring	docker-compose + mock servers	4 services start	0
+16	3.1b E2E tests	test_end_to_end.py E1–E5	E1–E5 green, ASR table ready	+ 5 = 64
+17	3.2 Dashboard	index.html + /logs + /metrics	Live counts update in browser	0
+18	3.3 README	README + demo.sh + GIF	demo.sh runs clean	0
+19	3.4 Paper	Rough paper draft	All sections have content	—
+20	Float	Bug fixes / TOFU pinning	All tests still green	±
+21	Float / ship	v0.1.0 tag + arXiv upload	GitHub release published	—
+
+Final count target: 59+ passing tests across 9 test modules by Day 21. Every test added is a line on your CV you can defend in an interview.
+
+
+Document generated for: MCP-Secure-Suite project planning. Based on consolidated briefs, Gemini refinements, and Maloyan & Namiot (2026) arXiv:2601.17549.

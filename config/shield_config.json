@@ -1,0 +1,55 @@
+{
+  "trust_mode": "prompt",
+  "default": {
+    "regex_blacklist": [
+      "rm\\s+-rf",
+      "chmod\\s+\\+x",
+      "/etc/passwd",
+      "nc\\s+-e",
+      "curl.*bash",
+      "wget.*sh",
+      "base64\\s+-d"
+    ],
+    "allowed_tools": [],
+    "sampling_allowed": false
+  },
+  "servers": {
+    "filesystem-server": {
+      "regex_blacklist": ["rm\\s+-rf", "chmod\\s+\\+x"],
+      "allowed_tools": ["read_file", "write_file", "list_directory"],
+      "sampling_allowed": false
+    },
+    "trusted-server": {
+      "regex_blacklist": [],
+      "allowed_tools": ["execute_code", "run_python"],
+      "sampling_allowed": true
+    }
+  },
+  "ast_policy": {
+    "blocked_modules": [
+      "os", "sys", "subprocess", "socket",
+      "ctypes", "urllib", "shutil", "pty",
+      "signal", "multiprocessing", "threading"
+    ],
+    "blocked_calls": ["eval", "exec", "compile", "__import__", "getattr", "setattr", "delattr"],
+    "blocked_attributes": ["system", "popen", "call", "run", "Popen", "spawn"]
+  },
+  "code_param_names": ["code", "script", "py_code", "python_code", "command"],
+  "output_sanitizer": {
+    "case_insensitive": true,
+    "line_start_patterns": [
+      "system:", "human:", "assistant:", "user:"
+    ],
+    "substring_patterns": [
+      "ignore previous instructions",
+      "ignore all previous",
+      "disregard your",
+      "you are now",
+      "new instructions:"
+    ]
+  },
+  "server_keys": {
+    "filesystem-server": "${MCP_KEY_FILESYSTEM}",
+    "trusted-server": "${MCP_KEY_TRUSTED}"
+  }
+}
