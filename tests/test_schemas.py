@@ -62,7 +62,7 @@ def test_capability_cert_valid():
         issued_by="platform-ca",
         issued_at=1700000000.0,
         expires_at=1800000000.0,
-        signature="signature_hash_value"
+        cert_pem="signature_hash_value"
     )
     assert cert.server_id == "filesystem-server"
     assert cert.capabilities == ["resources/list", "tools/call"]
@@ -76,7 +76,7 @@ def test_capability_cert_invalid_types():
             issued_by="platform-ca",
             issued_at="not_a_float",   # Invalid type
             expires_at=1800000000.0,
-            signature="sig"
+            cert_pem="sig"
         )
 
 def test_mcp_sec_header_valid():
@@ -123,7 +123,7 @@ def test_capability_cert_invalid_date_order():
             issued_by="ca",
             issued_at=1800000000.0,
             expires_at=1700000000.0,
-            signature="sig"
+            cert_pem="sig"
         )
     assert "expires_at must be strictly after issued_at" in str(excinfo.value)
 
@@ -135,7 +135,7 @@ def test_capability_cert_empty_capabilities():
             issued_by="ca",
             issued_at=1700000000.0,
             expires_at=1800000000.0,
-            signature="sig"
+            cert_pem="sig"
         )
 
 def test_capability_cert_whitespace_capabilities():
@@ -146,7 +146,7 @@ def test_capability_cert_whitespace_capabilities():
             issued_by="ca",
             issued_at=1700000000.0,
             expires_at=1800000000.0,
-            signature="sig"
+            cert_pem="sig"
         )
 
 def test_mcp_sec_header_negative_timestamp():

@@ -57,7 +57,7 @@ class CapabilityCert(BaseModel):
     issued_by: str = Field(..., min_length=1)
     issued_at: float
     expires_at: float
-    signature: str = Field(..., min_length=1)
+    cert_pem: str = Field(..., min_length=1)
 
     @field_validator("capabilities")
     @classmethod
