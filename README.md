@@ -93,7 +93,7 @@ Pre-installed in the sandbox image: `numpy`, `pandas`, `matplotlib`, `python-dat
 
 ## Test results
 
-78 tests, 12 modules, 5.75 seconds.
+78 tests, 12 modules, 6.05 seconds.
 
 ```
 tests/test_schemas.py              17 passed   Pydantic models, JSON-RPC validation
