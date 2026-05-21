@@ -182,3 +182,7 @@ Maloyan, N. & Namiot, D. (2026). *Sleeper Channels and Provenance Gates: Persist
 Rostamzadeh, M. et al. (2026). *MCP-DPT: A Defense-Placement Taxonomy and Coverage Analysis for Model Context Protocol Security*. arXiv:2604.07551 [cs.CR].
 
 Yang, Y. et al. (2025). *MCPSecBench: A Systematic Security Benchmark and Playground for Testing Model Context Protocols*. arXiv:2508.13220 [cs.CR].
+
+--- 
+
+MIT — see [LICENSE](LICENSE) for details.
