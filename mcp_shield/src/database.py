@@ -100,3 +100,19 @@ class DatabaseManager:
         except Exception as e:
             print(f"Database metrics query failed: {e}", file=sys.stderr)
         return metrics
+
+    async def get_logs(self, limit: int = 50) -> list:
+        """Retrieves the last N logs from the database, ordered by timestamp descending."""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                db.row_factory = aiosqlite.Row
+                async with db.execute(
+                    "SELECT id, timestamp, method, payload, status, duration_ms, exit_code, server_id FROM logs ORDER BY timestamp DESC LIMIT ?;",
+                    (limit,)
+                ) as cursor:
+                    rows = await cursor.fetchall()
+                    return [dict(row) for row in rows]
+        except Exception as e:
+            print(f"Database logs query failed: {e}", file=sys.stderr)
+            return []
+

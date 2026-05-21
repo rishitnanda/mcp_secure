@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP-Secure Shield Console</title>
+    <!-- Google Fonts Outfit -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: #151c2c;
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --border-color: #1f2937;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            padding: 2rem;
+            min-height: 100vh;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1.5rem;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .logo-badge {
+            background: linear-gradient(135deg, var(--accent-blue), #8b5cf6);
+            color: #fff;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+            font-weight: 800;
+            font-size: 1.2rem;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+        }
+
+        .title-sub {
+            font-size: 0.85rem;
+            color: var(--accent-blue);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: 600;
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            background: linear-gradient(to right, #fff, var(--text-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-badge {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: var(--accent-green);
+            padding: 0.5rem 1rem;
+            border-radius: 2rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .status-pulse {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-green);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.9); opacity: 0.6; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(0.9); opacity: 0.6; }
+        }
+
+        /* Grid metrics cards */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+        }
+
+        .card-success::before { background-color: var(--accent-green); }
+        .card-blocked::before { background-color: var(--accent-red); }
+        .card-sanitized::before { background-color: var(--accent-yellow); }
+        .card-timeout::before { background-color: var(--accent-blue); }
+
+        .card-title {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 500;
+        }
+
+        .card-value {
+            font-size: 2.25rem;
+            font-weight: 800;
+        }
+
+        /* Content Layout */
+        .layout-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+        }
+
+        @media (min-width: 1024px) {
+            .layout-grid {
+                grid-template-columns: 2fr 1fr;
+            }
+        }
+
+        .panel {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .panel-header {
+            margin-bottom: 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        /* Log Table */
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            letter-spacing: 1px;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.85rem;
+        }
+
+        tr:hover td {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+
+        .status-pill {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-pill-success { background-color: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+        .status-pill-blocked { background-color: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
+        .status-pill-sanitized { background-color: rgba(245, 158, 11, 0.15); color: var(--accent-yellow); }
+        .status-pill-timeout { background-color: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
+
+        .time-cell {
+            font-family: monospace;
+            color: var(--text-secondary);
+        }
+
+        .payload-cell {
+            font-family: monospace;
+            max-width: 250px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--text-secondary);
+        }
+
+        /* Chart card */
+        .chart-wrapper {
+            width: 100%;
+            height: 250px;
+            position: relative;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo-container">
+            <div class="logo-badge">🛡️ SHIELD</div>
+            <div>
+                <div class="title-sub">MCP-Secure-Suite</div>
+                <h1>Runtime Security Proxy</h1>
+            </div>
+        </div>
+        <div class="status-badge">
+            <div class="status-pulse"></div>
+            Live Guard Active
+        </div>
+    </header>
+
+    <div class="metrics-grid">
+        <div class="card card-success">
+            <span class="card-title">Success Logs</span>
+            <span id="metric-success" class="card-value">0</span>
+        </div>
+        <div class="card card-blocked">
+            <span class="card-title">Blocked Threats</span>
+            <span id="metric-blocked" class="card-value">0</span>
+        </div>
+        <div class="card card-sanitized">
+            <span class="card-title">Sanitized Injections</span>
+            <span id="metric-sanitized" class="card-value">0</span>
+        </div>
+        <div class="card card-timeout">
+            <span class="card-title">Execution Timeouts</span>
+            <span id="metric-timeout" class="card-value">0</span>
+        </div>
+    </div>
+
+    <div class="layout-grid">
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">🛡️ Security Logs (Last 20 Events)</span>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Server ID</th>
+                            <th>Method</th>
+                            <th>Payload</th>
+                            <th>Status</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-tbody">
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+                                Waiting for incoming traffic...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">📊 Threat Vector Distribution</span>
+            </div>
+            <div class="chart-wrapper">
+                <canvas id="threatChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let threatChart = null;
+
+        function updateChart(success, blocked, sanitized, timeout) {
+            const ctx = document.getElementById('threatChart').getContext('2d');
+            if (threatChart) {
+                threatChart.data.datasets[0].data = [success, blocked, sanitized, timeout];
+                threatChart.update();
+            } else {
+                threatChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Success', 'Blocked', 'Sanitized', 'Timeout'],
+                        datasets: [{
+                            label: 'Events Count',
+                            data: [success, blocked, sanitized, timeout],
+                            backgroundColor: [
+                                'rgba(16, 185, 129, 0.7)',
+                                'rgba(239, 68, 68, 0.7)',
+                                'rgba(245, 158, 11, 0.7)',
+                                'rgba(59, 130, 246, 0.7)'
+                            ],
+                            borderColor: [
+                                '#10b981',
+                                '#ef4444',
+                                '#f59e0b',
+                                '#3b82f6'
+                            ],
+                            borderWidth: 1.5,
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: '#1f2937' },
+                                ticks: { color: '#9ca3af' }
+                            },
+                            x: {
+                                grid: { display: false },
+                                ticks: { color: '#9ca3af' }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        async function fetchMetrics() {
+            try {
+                const res = await fetch('/metrics');
+                if (!res.ok) return;
+                const data = await res.json();
+                
+                const success = data.SUCCESS || 0;
+                const blocked = data.BLOCKED || 0;
+                const sanitized = data.SANITIZED || 0;
+                const timeout = data.TIMEOUT || 0;
+
+                document.getElementById('metric-success').innerText = success;
+                document.getElementById('metric-blocked').innerText = blocked;
+                document.getElementById('metric-sanitized').innerText = sanitized;
+                document.getElementById('metric-timeout').innerText = timeout;
+
+                updateChart(success, blocked, sanitized, timeout);
+            } catch (err) {
+                console.error("Failed to fetch metrics:", err);
+            }
+        }
+
+        async function fetchLogs() {
+            try {
+                const res = await fetch('/logs');
+                if (!res.ok) return;
+                const data = await res.json();
+                
+                const tbody = document.getElementById('logs-tbody');
+                if (data.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 2rem;">No logs found</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = '';
+                // Limit to last 20 events
+                const recentLogs = data.slice(0, 20);
+                
+                recentLogs.forEach(log => {
+                    const row = document.createElement('tr');
+                    
+                    const time = new Date(log.timestamp * 1000).toLocaleTimeString();
+                    const server = log.server_id;
+                    const method = log.method;
+                    const payload = log.payload;
+                    const status = log.status;
+                    const duration = log.duration_ms ? `${log.duration_ms.toFixed(1)} ms` : '-';
+
+                    let pillClass = 'status-pill-success';
+                    if (status === 'BLOCKED') pillClass = 'status-pill-blocked';
+                    else if (status === 'SANITIZED') pillClass = 'status-pill-sanitized';
+                    else if (status === 'TIMEOUT') pillClass = 'status-pill-timeout';
+
+                    row.innerHTML = `
+                        <td class="time-cell">${time}</td>
+                        <td><strong>${server}</strong></td>
+                        <td><code>${method}</code></td>
+                        <td class="payload-cell" title="${payload}">${payload}</td>
+                        <td><span class="status-pill ${pillClass}">${status}</span></td>
+                        <td>${duration}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (err) {
+                console.error("Failed to fetch logs:", err);
+            }
+        }
+
+        // Initialize polling intervals
+        fetchMetrics();
+        fetchLogs();
+        setInterval(fetchMetrics, 3000);
+        setInterval(fetchLogs, 5000);
+    </script>
+</body>
+</html>
