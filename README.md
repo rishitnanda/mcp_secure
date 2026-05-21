@@ -18,7 +18,7 @@ Two components, both required:
 sequenceDiagram
     participant Client as AI Client
     participant Shield as MCP-Shield
-    participant Box as MCP-Box
+    participant Sandbox as MCP-Box
     participant Server as Target MCP Server
 
     Client->>Shield: JSON-RPC tools/call
@@ -26,9 +26,9 @@ sequenceDiagram
     alt Policy violation
         Shield-->>Client: JSON-RPC error (-32602 / -32601)
     else Code execution
-        Shield->>Box: execute(code)
-        Note over Box: Alpine container, network_mode=none, 2s timeout
-        Box-->>Shield: {exit_code, logs, status, duration_ms}
+        Shield->>Sandbox: execute(code)
+        Note over Sandbox: Alpine container, network_mode=none, 2s timeout
+        Sandbox-->>Shield: {exit_code, logs, status, duration_ms}
         Shield-->>Client: result
     else Standard tool call
         Shield->>Server: forward request
