@@ -39,3 +39,4 @@ Thumbs.db
 
 # Keep locally but ignore on git
 phase_0/
+docs/WEEK*.md
