@@ -1,41 +1,212 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MCP-Secure Shield Console</title>
-    <!-- Google Fonts Outfit -->
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <meta name="description" content="Real-time security monitoring dashboard for MCP-Secure Shield — runtime proxy telemetry and threat analysis.">
+    <!-- Google Fonts fallback -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // Set theme immediately to avoid flash
+        const savedTheme = localStorage.getItem('shield-theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
     <style>
-        :root {
-            --bg-color: #0b0f19;
-            --card-bg: #151c2c;
-            --text-primary: #f3f4f6;
-            --text-secondary: #9ca3af;
-            --accent-blue: #3b82f6;
-            --accent-green: #10b981;
-            --accent-red: #ef4444;
-            --accent-yellow: #f59e0b;
-            --border-color: #1f2937;
+        /* ─── Custom Fonts ─── */
+        @font-face {
+            font-family: 'Flashstrike';
+            src: url('font_display.ttf') format('truetype');
+            font-display: swap;
+            unicode-range: U+0000-002F, U+003A-10FFFF;
         }
 
+        @font-face {
+            font-family: 'Handmade';
+            src: url('font_body.otf') format('opentype');
+            font-display: swap;
+        }
+
+        /* ─── Light Mode (Default) ─── */
+        :root {
+            --bg-color: #FDFBF7;
+            --text-color: #1A1A1A;
+            --text-secondary: rgba(26, 26, 26, 0.6);
+            --accent-color: #6A1B9A;
+            --accent-blue: #2979FF;
+            --accent-green: #00C853;
+            --accent-red: #FF1744;
+            --accent-yellow: #FFAB00;
+
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --border-color: rgba(0, 0, 0, 0.12);
+            --grid-color: rgba(106, 27, 154, 0.08);
+            --glow-color: rgba(106, 27, 154, 0.05);
+            --modal-overlay: rgba(255, 255, 255, 0.45);
+            --glass-border: rgba(255, 255, 255, 0.15);
+            --panel-inner-glow: rgba(255, 255, 255, 0.08);
+            --shadow-soft: rgba(0, 0, 0, 0.06);
+            --shadow-medium: rgba(0, 0, 0, 0.12);
+
+            --blob-1: rgba(106, 27, 154, 0.25);
+            --blob-2: rgba(41, 121, 255, 0.18);
+
+            --card-success-bg: rgba(0, 200, 83, 0.08);
+            --card-blocked-bg: rgba(255, 23, 68, 0.08);
+            --card-sanitized-bg: rgba(255, 171, 0, 0.08);
+            --card-timeout-bg: rgba(41, 121, 255, 0.08);
+
+            --moon-shadow: #D1C4E9;
+            --transition-main: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+            --radius: 12px;
+
+            --font-display: 'Flashstrike', 'Fira Code', 'Outfit', sans-serif;
+            --font-body: 'Handmade', 'Outfit', sans-serif;
+            --font-mono: 'Fira Code', monospace;
+        }
+
+        /* ─── Dark Mode ─── */
+        [data-theme="dark"] {
+            --bg-color: #000000;
+            --text-color: #F5F5F5;
+            --text-secondary: rgba(255, 255, 255, 0.55);
+            --accent-color: #d1c4e9;
+            --accent-blue: #64B5F6;
+            --accent-green: #69F0AE;
+            --accent-red: #FF5252;
+            --accent-yellow: #FFD740;
+
+            --glass-bg: rgba(18, 18, 18, 0.75);
+            --border-color: rgba(255, 255, 255, 0.12);
+            --grid-color: rgba(209, 196, 233, 0.10);
+            --glow-color: rgba(209, 196, 233, 0.06);
+            --modal-overlay: rgba(0, 0, 0, 0.6);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --panel-inner-glow: rgba(255, 255, 255, 0.03);
+            --shadow-soft: rgba(0, 0, 0, 0.2);
+            --shadow-medium: rgba(0, 0, 0, 0.4);
+
+            --blob-1: rgba(106, 27, 154, 0.30);
+            --blob-2: rgba(41, 121, 255, 0.20);
+
+            --card-success-bg: rgba(105, 240, 174, 0.08);
+            --card-blocked-bg: rgba(255, 82, 82, 0.08);
+            --card-sanitized-bg: rgba(255, 215, 64, 0.08);
+            --card-timeout-bg: rgba(100, 181, 246, 0.08);
+        }
+
+        /* ─── Reset ─── */
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: 'Outfit', sans-serif;
-            transition: background-color 0.3s, border-color 0.3s;
         }
 
+        /* ─── Body with grid background ─── */
         body {
             background-color: var(--bg-color);
-            color: var(--text-primary);
-            padding: 2rem;
+            color: var(--text-color);
+            font-family: var(--font-body);
+            font-size: 1rem;
+            line-height: 1.6;
             min-height: 100vh;
+            overflow-x: hidden;
+            padding: 2rem;
+            transition: background-color 0.5s ease, color 0.4s ease;
+
+            background-image:
+                radial-gradient(circle at 15% 50%, var(--glow-color), transparent 25%),
+                radial-gradient(circle at 85% 30%, var(--glow-color), transparent 25%),
+                linear-gradient(var(--grid-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 50px 50px, 50px 50px;
+            background-attachment: fixed;
         }
 
+        /* ─── Floating Blobs ─── */
+        .blob {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(150px);
+            z-index: -2;
+            opacity: 0.5;
+            animation: driftBlob 30s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: none;
+        }
+
+        .blob-1 {
+            width: 600px;
+            height: 600px;
+            background: var(--blob-1);
+            top: -10%;
+            left: -10%;
+        }
+
+        .blob-2 {
+            width: 800px;
+            height: 800px;
+            background: var(--blob-2);
+            bottom: -20%;
+            right: -10%;
+            animation-delay: -15s;
+        }
+
+        @keyframes driftBlob {
+            0%   { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(100px, 50px) scale(1.2); }
+        }
+
+        /* ─── HUD Side Text ─── */
+        .hud {
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+            font-family: var(--font-display);
+            font-size: 0.7rem;
+            color: var(--accent-color);
+            letter-spacing: 4px;
+            opacity: 0.5;
+            z-index: 1000;
+            pointer-events: none;
+            writing-mode: vertical-rl;
+            text-transform: uppercase;
+        }
+
+        .hud-left {
+            left: 1.5%;
+            transform: translateY(-50%) rotate(180deg);
+        }
+
+        .hud-right {
+            right: 1.5%;
+        }
+
+        /* ─── Typography ─── */
+        h1, h2, h3 {
+            font-family: var(--font-display);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            background: linear-gradient(to right, var(--text-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        code {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+        }
+
+        /* ─── Header ─── */
         header {
             display: flex;
             justify-content: space-between;
@@ -52,34 +223,34 @@
         }
 
         .logo-badge {
-            background: linear-gradient(135deg, var(--accent-blue), #8b5cf6);
+            background: linear-gradient(135deg, var(--accent-color), var(--accent-blue));
             color: #fff;
             padding: 0.5rem 0.75rem;
             border-radius: 0.5rem;
             font-weight: 800;
             font-size: 1.2rem;
+            font-family: var(--font-display);
             letter-spacing: 1px;
-            box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+            box-shadow: 0 4px 14px rgba(106, 27, 154, 0.35);
         }
 
         .title-sub {
             font-size: 0.85rem;
-            color: var(--accent-blue);
+            color: var(--accent-color);
             text-transform: uppercase;
             letter-spacing: 2px;
             font-weight: 600;
+            font-family: var(--font-display);
         }
 
-        h1 {
-            font-size: 1.75rem;
-            font-weight: 700;
-            background: linear-gradient(to right, #fff, var(--text-secondary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
         }
 
         .status-badge {
-            background-color: rgba(16, 185, 129, 0.1);
+            background-color: rgba(0, 200, 83, 0.08);
             color: var(--accent-green);
             padding: 0.5rem 1rem;
             border-radius: 2rem;
@@ -88,7 +259,7 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            border: 1px solid rgba(16, 185, 129, 0.2);
+            border: 1px solid rgba(0, 200, 83, 0.15);
         }
 
         .status-pulse {
@@ -100,12 +271,99 @@
         }
 
         @keyframes pulse {
-            0% { transform: scale(0.9); opacity: 0.6; }
-            50% { transform: scale(1.2); opacity: 1; }
+            0%   { transform: scale(0.9); opacity: 0.6; }
+            50%  { transform: scale(1.2); opacity: 1; }
             100% { transform: scale(0.9); opacity: 0.6; }
         }
 
-        /* Grid metrics cards */
+        /* ─── Premium Holographic Theme Toggle ─── */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 30px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-color);
+            transition: var(--transition-main);
+            border-radius: 34px;
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 22px;
+            width: 22px;
+            left: 4px;
+            top: 3px;
+            background: #ffcc00;
+            transition: var(--transition-main);
+            border-radius: 50%;
+            box-shadow: 0 0 10px #ffcc00, 0 0 20px rgba(255, 204, 0, 0.4);
+            z-index: 2;
+        }
+
+        .slider:after {
+            content: "";
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            background: rgba(0, 0, 0, 0.15);
+            border-radius: 50%;
+            left: 10px;
+            top: 8px;
+            opacity: 0;
+            transition: var(--transition-main);
+            box-shadow: 6px 4px 0 rgba(0, 0, 0, 0.15), 2px 10px 0 rgba(0, 0, 0, 0.15);
+            z-index: 3;
+        }
+
+        input:checked + .slider {
+            background: rgba(106, 27, 154, 0.2);
+            border-color: var(--accent-color);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(28px);
+            background: #f5f5f5;
+            box-shadow: 0 0 10px #f5f5f5, 0 0 20px rgba(209, 196, 233, 0.6);
+        }
+
+        input:checked + .slider:after {
+            opacity: 1;
+            transform: translateX(28px);
+        }
+
+        .switch input:focus-visible + .slider {
+            outline: 2px solid var(--accent-color);
+            outline-offset: 4px;
+        }
+
+        @keyframes themeSurge {
+            0%   { transform: scale(1); filter: brightness(1); }
+            50%  { transform: scale(1.1); filter: brightness(1.4); }
+            100% { transform: scale(1); filter: brightness(1); }
+        }
+
+        .switch-surge {
+            animation: themeSurge 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        /* ─── Glassmorphic Metric Cards ─── */
         .metrics-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -114,46 +372,59 @@
         }
 
         .card {
-            background-color: var(--card-bg);
+            background: var(--glass-bg);
+            backdrop-filter: blur(15px);
             border: 1px solid var(--border-color);
-            border-radius: 1rem;
+            border-radius: var(--radius);
             padding: 1.5rem;
             position: relative;
             overflow: hidden;
             display: flex;
             flex-direction: column;
             gap: 0.5rem;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 4px 20px var(--shadow-soft), inset 0 0 15px var(--panel-inner-glow);
+            transition: var(--transition-main);
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 30px var(--shadow-medium), inset 0 0 15px var(--panel-inner-glow);
+            border-color: var(--accent-color);
         }
 
         .card::before {
             content: '';
             position: absolute;
-            top: 0;
-            left: 0;
+            top: 0; left: 0;
             width: 4px;
             height: 100%;
         }
 
-        .card-success::before { background-color: var(--accent-green); }
-        .card-blocked::before { background-color: var(--accent-red); }
-        .card-sanitized::before { background-color: var(--accent-yellow); }
-        .card-timeout::before { background-color: var(--accent-blue); }
+        .card-success::before { background: var(--accent-green); }
+        .card-success { background: var(--card-success-bg); backdrop-filter: blur(15px); border: 1px solid var(--border-color); }
+        .card-blocked::before { background: var(--accent-red); }
+        .card-blocked { background: var(--card-blocked-bg); backdrop-filter: blur(15px); border: 1px solid var(--border-color); }
+        .card-sanitized::before { background: var(--accent-yellow); }
+        .card-sanitized { background: var(--card-sanitized-bg); backdrop-filter: blur(15px); border: 1px solid var(--border-color); }
+        .card-timeout::before { background: var(--accent-blue); }
+        .card-timeout { background: var(--card-timeout-bg); backdrop-filter: blur(15px); border: 1px solid var(--border-color); }
 
         .card-title {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             color: var(--text-secondary);
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 1.5px;
             font-weight: 500;
+            font-family: var(--font-display);
         }
 
         .card-value {
             font-size: 2.25rem;
             font-weight: 800;
+            font-family: var(--font-display);
         }
 
-        /* Content Layout */
+        /* ─── Layout Grid ─── */
         .layout-grid {
             display: grid;
             grid-template-columns: 1fr;
@@ -166,12 +437,19 @@
             }
         }
 
+        /* ─── Glassmorphic Panels ─── */
         .panel {
-            background-color: var(--card-bg);
+            background: var(--glass-bg);
+            backdrop-filter: blur(15px);
             border: 1px solid var(--border-color);
-            border-radius: 1rem;
+            border-radius: var(--radius);
             padding: 1.5rem;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 4px 20px var(--shadow-soft), inset 0 0 20px var(--panel-inner-glow);
+            transition: var(--transition-main);
+        }
+
+        .panel:hover {
+            box-shadow: 0 6px 28px var(--shadow-medium), inset 0 0 20px var(--panel-inner-glow);
         }
 
         .panel-header {
@@ -184,10 +462,12 @@
         .panel-title {
             font-size: 1.1rem;
             font-weight: 600;
-            letter-spacing: 0.5px;
+            letter-spacing: 1px;
+            font-family: var(--font-display);
+            text-transform: uppercase;
         }
 
-        /* Log Table */
+        /* ─── Log Table ─── */
         .table-container {
             width: 100%;
             overflow-x: auto;
@@ -200,45 +480,55 @@
         }
 
         th {
-            font-size: 0.75rem;
+            font-size: 0.72rem;
             text-transform: uppercase;
             color: var(--text-secondary);
-            letter-spacing: 1px;
+            letter-spacing: 1.5px;
             padding: 0.75rem 1rem;
             border-bottom: 1px solid var(--border-color);
+            font-family: var(--font-display);
         }
 
         td {
             padding: 1rem;
             border-bottom: 1px solid var(--border-color);
             font-size: 0.85rem;
+            transition: background-color 0.2s ease;
+        }
+
+        tr {
+            cursor: pointer;
+            transition: var(--transition-main);
         }
 
         tr:hover td {
-            background-color: rgba(255, 255, 255, 0.02);
+            background-color: var(--glow-color);
         }
 
         .status-pill {
             display: inline-block;
-            padding: 0.25rem 0.5rem;
+            padding: 0.25rem 0.6rem;
             border-radius: 0.25rem;
-            font-size: 0.75rem;
-            font-weight: 600;
+            font-size: 0.72rem;
+            font-weight: 700;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-family: var(--font-display);
         }
 
-        .status-pill-success { background-color: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
-        .status-pill-blocked { background-color: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
-        .status-pill-sanitized { background-color: rgba(245, 158, 11, 0.15); color: var(--accent-yellow); }
-        .status-pill-timeout { background-color: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
+        .status-pill-success   { background-color: rgba(0, 200, 83, 0.12); color: var(--accent-green); }
+        .status-pill-blocked   { background-color: rgba(255, 23, 68, 0.12); color: var(--accent-red); }
+        .status-pill-sanitized { background-color: rgba(255, 171, 0, 0.12); color: var(--accent-yellow); }
+        .status-pill-timeout   { background-color: rgba(41, 121, 255, 0.12); color: var(--accent-blue); }
 
         .time-cell {
-            font-family: monospace;
+            font-family: var(--font-mono);
             color: var(--text-secondary);
+            font-size: 0.8rem;
         }
 
         .payload-cell {
-            font-family: monospace;
+            font-family: var(--font-mono);
             max-width: 250px;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -246,16 +536,206 @@
             color: var(--text-secondary);
         }
 
-        /* Chart card */
+        /* ─── Chart Card ─── */
         .chart-wrapper {
             width: 100%;
             height: 250px;
             position: relative;
         }
+
+        /* ─── Log Detail Modal ─── */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: var(--modal-overlay);
+            backdrop-filter: blur(12px) saturate(180%);
+            z-index: 5000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+            animation: modalFadeIn 0.3s ease;
+        }
+
+        .modal-overlay[style*="display: none"] {
+            pointer-events: none;
+        }
+
+        .modal-content {
+            max-width: 680px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            border: 2px solid var(--accent-color);
+            border-radius: var(--radius);
+            padding: 2rem;
+            position: relative;
+            box-shadow: 0 0 40px var(--shadow-medium), inset 0 0 20px var(--panel-inner-glow);
+            animation: modalContentZoom 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .modal-close-btn {
+            position: absolute;
+            top: 1rem; right: 1rem;
+            background: transparent;
+            border: 1px solid var(--accent-color);
+            color: var(--accent-color);
+            font-family: var(--font-display);
+            font-size: 0.75rem;
+            letter-spacing: 2px;
+            padding: 0.4rem 0.8rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            opacity: 0.7;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .modal-close-btn:hover {
+            opacity: 1;
+            background: var(--accent-color);
+            color: #fff;
+            box-shadow: 0 0 15px var(--accent-color);
+            transform: scale(1.05);
+        }
+
+        .modal-close-btn:focus-visible {
+            outline: 2px solid var(--accent-color);
+            outline-offset: 4px;
+        }
+
+        .modal-detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.25rem;
+            margin-top: 1.5rem;
+        }
+
+        .modal-detail-grid section h4 {
+            color: var(--accent-color);
+            font-family: var(--font-display);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 0.35rem;
+        }
+
+        .modal-detail-grid section p {
+            font-size: 0.95rem;
+            color: var(--text-color);
+            word-break: break-word;
+        }
+
+        .modal-payload-block {
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .modal-payload-block h4 {
+            color: var(--accent-color);
+            font-family: var(--font-display);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 0.5rem;
+        }
+
+        .modal-payload-block pre {
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: var(--font-mono);
+            font-size: 0.82rem;
+            color: var(--text-color);
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 250px;
+            overflow-y: auto;
+        }
+
+        .modal-title {
+            font-family: var(--font-display);
+            font-size: 1.25rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 0.25rem;
+            padding-right: 4rem;
+        }
+
+        .modal-subtitle {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        @keyframes modalFadeIn {
+            from { opacity: 0; }
+            to   { opacity: 1; }
+        }
+
+        @keyframes modalContentZoom {
+            from { opacity: 0; transform: scale(0.8) translateY(20px); filter: blur(10px); }
+            to   { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+        }
+
+        /* ─── Entrance Animation ─── */
+        .fade-up {
+            opacity: 0;
+            transform: translateY(25px);
+            animation: heroFadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .delay-1 { animation-delay: 0.05s; }
+        .delay-2 { animation-delay: 0.15s; }
+        .delay-3 { animation-delay: 0.25s; }
+        .delay-4 { animation-delay: 0.35s; }
+        .delay-5 { animation-delay: 0.45s; }
+
+        @keyframes heroFadeUp {
+            from { opacity: 0; transform: translateY(25px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ─── Reduced Motion ─── */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* ─── Mobile ─── */
+        @media (max-width: 768px) {
+            body { padding: 1rem; }
+            header { flex-direction: column; gap: 1rem; align-items: flex-start; }
+            .header-actions { width: 100%; justify-content: space-between; }
+            .hud { display: none !important; }
+            .modal-detail-grid { grid-template-columns: 1fr; }
+            .metrics-grid { grid-template-columns: 1fr 1fr; }
+        }
+
+        @media (max-width: 480px) {
+            .metrics-grid { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
-    <header>
+    <!-- Background Blobs -->
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+
+    <!-- HUD Side Text -->
+    <div class="hud hud-left">SYS.ID // SHIELD<br>NODE: GATEWAY</div>
+    <div class="hud hud-right">STATUS // ACTIVE<br>MODE: INTERCEPT</div>
+
+    <!-- Header -->
+    <header class="fade-up delay-1">
         <div class="logo-container">
             <div class="logo-badge">🛡️ SHIELD</div>
             <div>
@@ -263,13 +743,20 @@
                 <h1>Runtime Security Proxy</h1>
             </div>
         </div>
-        <div class="status-badge">
-            <div class="status-pulse"></div>
-            Live Guard Active
+        <div class="header-actions">
+            <div class="status-badge">
+                <div class="status-pulse"></div>
+                Live Guard Active
+            </div>
+            <label class="switch" id="theme-switch">
+                <input type="checkbox" id="theme-toggle" aria-label="Toggle dark mode">
+                <span class="slider"></span>
+            </label>
         </div>
     </header>
 
-    <div class="metrics-grid">
+    <!-- Metric Cards -->
+    <div class="metrics-grid fade-up delay-2">
         <div class="card card-success">
             <span class="card-title">Success Logs</span>
             <span id="metric-success" class="card-value">0</span>
@@ -288,10 +775,12 @@
         </div>
     </div>
 
-    <div class="layout-grid">
+    <!-- Main Layout -->
+    <div class="layout-grid fade-up delay-3">
+        <!-- Logs Panel -->
         <div class="panel">
             <div class="panel-header">
-                <span class="panel-title">🛡️ Security Logs (Last 20 Events)</span>
+                <span class="panel-title">🛡️ Security_Logs</span>
             </div>
             <div class="table-container">
                 <table>
@@ -316,9 +805,10 @@
             </div>
         </div>
 
-        <div class="panel">
+        <!-- Chart Panel -->
+        <div class="panel fade-up delay-4">
             <div class="panel-header">
-                <span class="panel-title">📊 Threat Vector Distribution</span>
+                <span class="panel-title">📊 Threat_Vectors</span>
             </div>
             <div class="chart-wrapper">
                 <canvas id="threatChart"></canvas>
@@ -326,11 +816,109 @@
         </div>
     </div>
 
+    <!-- Log Detail Modal -->
+    <div id="log-detail-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <button id="close-modal" class="modal-close-btn" aria-label="Close log details">CLOSE_X</button>
+            <h2 class="modal-title" id="modal-method">—</h2>
+            <p class="modal-subtitle" id="modal-server-line">—</p>
+
+            <div class="modal-detail-grid">
+                <section>
+                    <h4>Timestamp</h4>
+                    <p id="modal-time">—</p>
+                </section>
+                <section>
+                    <h4>Status</h4>
+                    <p id="modal-status">—</p>
+                </section>
+                <section>
+                    <h4>Server_ID</h4>
+                    <p id="modal-server">—</p>
+                </section>
+                <section>
+                    <h4>Duration</h4>
+                    <p id="modal-duration">—</p>
+                </section>
+            </div>
+
+            <div class="modal-payload-block">
+                <h4>Raw_Payload</h4>
+                <pre id="modal-payload">—</pre>
+            </div>
+        </div>
+    </div>
+
     <script>
+        /* ─── Theme Toggle ─── */
+        const themeToggle = document.getElementById('theme-toggle');
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        themeToggle.checked = currentTheme === 'dark';
+
+        themeToggle.addEventListener('change', (e) => {
+            const theme = e.target.checked ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('shield-theme', theme);
+
+            // Surge animation
+            const switchLabel = themeToggle.closest('.switch');
+            if (switchLabel) {
+                switchLabel.classList.remove('switch-surge');
+                void switchLabel.offsetWidth;
+                switchLabel.classList.add('switch-surge');
+            }
+
+            // Update chart colors
+            if (threatChart) {
+                updateChartTheme(threatChart, theme);
+            }
+        });
+
+        /* ─── Chart ─── */
         let threatChart = null;
+
+        function getChartColors(theme) {
+            if (theme === 'dark') {
+                return {
+                    grid: 'rgba(255, 255, 255, 0.06)',
+                    ticks: 'rgba(255, 255, 255, 0.5)',
+                    bars: [
+                        'rgba(105, 240, 174, 0.7)',
+                        'rgba(255, 82, 82, 0.7)',
+                        'rgba(255, 215, 64, 0.7)',
+                        'rgba(100, 181, 246, 0.7)'
+                    ],
+                    borders: ['#69F0AE', '#FF5252', '#FFD740', '#64B5F6']
+                };
+            }
+            return {
+                grid: 'rgba(0, 0, 0, 0.06)',
+                ticks: 'rgba(26, 26, 26, 0.5)',
+                bars: [
+                    'rgba(0, 200, 83, 0.6)',
+                    'rgba(255, 23, 68, 0.6)',
+                    'rgba(255, 171, 0, 0.6)',
+                    'rgba(41, 121, 255, 0.6)'
+                ],
+                borders: ['#00C853', '#FF1744', '#FFAB00', '#2979FF']
+            };
+        }
+
+        function updateChartTheme(chart, theme) {
+            const colors = getChartColors(theme);
+            chart.data.datasets[0].backgroundColor = colors.bars;
+            chart.data.datasets[0].borderColor = colors.borders;
+            chart.options.scales.y.grid.color = colors.grid;
+            chart.options.scales.y.ticks.color = colors.ticks;
+            chart.options.scales.x.ticks.color = colors.ticks;
+            chart.update();
+        }
 
         function updateChart(success, blocked, sanitized, timeout) {
             const ctx = document.getElementById('threatChart').getContext('2d');
+            const theme = document.documentElement.getAttribute('data-theme');
+            const colors = getChartColors(theme);
+
             if (threatChart) {
                 threatChart.data.datasets[0].data = [success, blocked, sanitized, timeout];
                 threatChart.update();
@@ -342,18 +930,8 @@
                         datasets: [{
                             label: 'Events Count',
                             data: [success, blocked, sanitized, timeout],
-                            backgroundColor: [
-                                'rgba(16, 185, 129, 0.7)',
-                                'rgba(239, 68, 68, 0.7)',
-                                'rgba(245, 158, 11, 0.7)',
-                                'rgba(59, 130, 246, 0.7)'
-                            ],
-                            borderColor: [
-                                '#10b981',
-                                '#ef4444',
-                                '#f59e0b',
-                                '#3b82f6'
-                            ],
+                            backgroundColor: colors.bars,
+                            borderColor: colors.borders,
                             borderWidth: 1.5,
                             borderRadius: 6
                         }]
@@ -367,12 +945,12 @@
                         scales: {
                             y: {
                                 beginAtZero: true,
-                                grid: { color: '#1f2937' },
-                                ticks: { color: '#9ca3af' }
+                                grid: { color: colors.grid },
+                                ticks: { color: colors.ticks }
                             },
                             x: {
                                 grid: { display: false },
-                                ticks: { color: '#9ca3af' }
+                                ticks: { color: colors.ticks }
                             }
                         }
                     }
@@ -380,12 +958,47 @@
             }
         }
 
+        /* ─── Log Detail Modal ─── */
+        const modal = document.getElementById('log-detail-modal');
+        const closeBtn = document.getElementById('close-modal');
+        let logCache = [];
+
+        function openModal(logItem) {
+            document.getElementById('modal-method').textContent = logItem.method || '—';
+            document.getElementById('modal-server-line').textContent = `Server: ${logItem.server_id || '—'}`;
+            document.getElementById('modal-time').textContent = logItem.timestamp
+                ? new Date(logItem.timestamp * 1000).toLocaleString()
+                : '—';
+            document.getElementById('modal-status').innerHTML = logItem.status
+                ? `<span class="status-pill status-pill-${logItem.status.toLowerCase()}">${logItem.status}</span>`
+                : '—';
+            document.getElementById('modal-server').textContent = logItem.server_id || '—';
+            document.getElementById('modal-duration').textContent = logItem.duration_ms
+                ? `${logItem.duration_ms.toFixed(1)} ms`
+                : '—';
+            document.getElementById('modal-payload').textContent = logItem.payload || '—';
+            modal.style.display = 'flex';
+        }
+
+        function closeModal() {
+            modal.style.display = 'none';
+        }
+
+        closeBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+
+        /* ─── Data Fetching ─── */
         async function fetchMetrics() {
             try {
                 const res = await fetch('/metrics');
                 if (!res.ok) return;
                 const data = await res.json();
-                
+
                 const success = data.SUCCESS || 0;
                 const blocked = data.BLOCKED || 0;
                 const sanitized = data.SANITIZED || 0;
@@ -407,20 +1020,20 @@
                 const res = await fetch('/logs');
                 if (!res.ok) return;
                 const data = await res.json();
-                
+
                 const tbody = document.getElementById('logs-tbody');
                 if (data.length === 0) {
                     tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 2rem;">No logs found</td></tr>`;
                     return;
                 }
 
+                logCache = data.slice(0, 20);
                 tbody.innerHTML = '';
-                // Limit to last 20 events
-                const recentLogs = data.slice(0, 20);
-                
-                recentLogs.forEach(log => {
+
+                logCache.forEach((log, idx) => {
                     const row = document.createElement('tr');
-                    
+                    row.setAttribute('data-log-idx', idx);
+
                     const time = new Date(log.timestamp * 1000).toLocaleTimeString();
                     const server = log.server_id;
                     const method = log.method;
@@ -448,7 +1061,17 @@
             }
         }
 
-        // Initialize polling intervals
+        // Delegated click handler for log rows
+        document.getElementById('logs-tbody').addEventListener('click', (e) => {
+            const row = e.target.closest('tr[data-log-idx]');
+            if (!row) return;
+            const idx = parseInt(row.getAttribute('data-log-idx'), 10);
+            if (logCache[idx]) {
+                openModal(logCache[idx]);
+            }
+        });
+
+        // Initialize
         fetchMetrics();
         fetchLogs();
         setInterval(fetchMetrics, 3000);

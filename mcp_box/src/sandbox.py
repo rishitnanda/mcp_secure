@@ -95,7 +95,7 @@ class DockerSandbox:
                 None,
                 lambda: self.client.containers.create(
                     image="mcp-box-sandbox:latest",
-                    command="python3 main.py",
+                    command="python3 /workspace/main.py",
                     labels={"mcp-box-sandbox": "true"},
                     network_mode="none",
                     mem_limit="128m",
