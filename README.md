@@ -53,9 +53,17 @@ make test                 # run the full test suite
 To run the full stack with mock servers:
 
 ```bash
-docker-compose up -d   # start gateway + trusted + adversarial mock servers
-./demo.sh              # fire three attack payloads and show results
-docker-compose down    # tear down when finished
+docker-compose up -d
+# start gateway + trusted + adversarial mock servers
+
+./demo.sh
+# fire three attack payloads and show results
+
+docker-compose down
+# tear down when finished
+
+sudo fuser -k 8000/tcp 8001/tcp 8002/tcp
+# if ports are not released
 ```
 
 The admin dashboard is at `http://localhost:8000/dashboard/` once the stack is running.
