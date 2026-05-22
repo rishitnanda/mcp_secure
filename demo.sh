@@ -16,7 +16,7 @@ echo -e "${BLUE}🛡️  MCP-Secure-Suite Security Interception Demonstration${N
 echo -e "${BLUE}======================================================================${NC}"
 
 # Check if gateway is running
-if ! lsof -i :8000 > /dev/null; then
+if ! curl -s --connect-timeout 1 http://127.0.0.1:8000/metrics > /dev/null 2>&1; then
     echo -e "${RED}[ERROR] Gateway is not running on port 8000.${NC}"
     echo -e "Please run the server using docker-compose or command line first:"
     echo -e "  - Docker Compose: docker-compose up"
@@ -45,7 +45,7 @@ response_e1=$(curl -s -X POST http://127.0.0.1:8000/mcp \
   -d "$payload_e1")
 
 echo -e "Payload Sent: import os; os.system(\"rm -rf /\")"
-if echo "$response_e1" | grep -q "security policy violation"; then
+if echo "$response_e1" | grep -qi "security policy violation"; then
     echo -e "${GREEN}Result: [BLOCKED] Shield caught the command injection in the regex/AST layer!${NC}"
 else
     echo -e "${RED}Result: [BYPASSED] Attack was not blocked!${NC}"
@@ -72,7 +72,7 @@ response_e3=$(curl -s -X POST http://127.0.0.1:8000/mcp \
   -d "$payload_e3")
 
 echo -e "Payload Sent: tools/call name='trigger_injection'"
-if echo "$response_e3" | grep -q "sanitized"; then
+if echo "$response_e3" | grep -qi "sanitized"; then
     echo -e "${YELLOW}Result: [SANITIZED] Shield intercepted the prompt override content and replaced it!${NC}"
 else
     echo -e "${RED}Result: [BYPASSED] Raw output returned to agent client!${NC}"
@@ -99,7 +99,7 @@ response_e4=$(curl -s -X POST http://127.0.0.1:8000/mcp \
   -d "$payload_e4")
 
 echo -e "Payload Sent: tools/call name='escalate_sampling'"
-if echo "$response_e4" | grep -E -q "capability|violation|error"; then
+if echo "$response_e4" | grep -E -qi "capability|violation|error"; then
     echo -e "${GREEN}Result: [BLOCKED] Shield attestation denied sampling callback from unverified server!${NC}"
 else
     echo -e "${RED}Result: [BYPASSED] Capability request allowed!${NC}"

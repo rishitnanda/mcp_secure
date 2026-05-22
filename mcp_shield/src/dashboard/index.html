@@ -64,8 +64,8 @@
             --transition-main: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
             --radius: 12px;
 
-            --font-display: 'Flashstrike', 'Fira Code', 'Outfit', sans-serif;
-            --font-body: 'Handmade', 'Outfit', sans-serif;
+            --font-display: 'Outfit', system-ui, sans-serif;
+            --font-body: 'Outfit', system-ui, sans-serif;
             --font-mono: 'Fira Code', monospace;
         }
 
@@ -188,17 +188,13 @@
         /* ─── Typography ─── */
         h1, h2, h3 {
             font-family: var(--font-display);
-            text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 0.5px;
         }
 
         h1 {
-            font-size: 1.75rem;
-            font-weight: 700;
-            background: linear-gradient(to right, var(--text-color), var(--accent-color));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: var(--text-color);
+            font-size: 1.4rem;
+            font-weight: 600;
         }
 
         code {
@@ -220,18 +216,6 @@
             display: flex;
             align-items: center;
             gap: 0.75rem;
-        }
-
-        .logo-badge {
-            background: linear-gradient(135deg, var(--accent-color), var(--accent-blue));
-            color: #fff;
-            padding: 0.5rem 0.75rem;
-            border-radius: 0.5rem;
-            font-weight: 800;
-            font-size: 1.2rem;
-            font-family: var(--font-display);
-            letter-spacing: 1px;
-            box-shadow: 0 4px 14px rgba(106, 27, 154, 0.35);
         }
 
         .title-sub {
@@ -439,6 +423,7 @@
 
         /* ─── Glassmorphic Panels ─── */
         .panel {
+            align-self: start;
             background: var(--glass-bg);
             backdrop-filter: blur(15px);
             border: 1px solid var(--border-color);
@@ -539,7 +524,7 @@
         /* ─── Chart Card ─── */
         .chart-wrapper {
             width: 100%;
-            height: 250px;
+            height: 35vh;
             position: relative;
         }
 
@@ -723,6 +708,25 @@
         @media (max-width: 480px) {
             .metrics-grid { grid-template-columns: 1fr; }
         }
+
+        /* ─── Stage Pills ─── */
+        .stage-pill {
+            display: inline-block;
+            padding: 0.2rem 0.55rem;
+            border-radius: 4px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            font-family: var(--font-mono);
+            letter-spacing: 0.5px;
+            text-transform: lowercase;
+        }
+        .stage-pill-default  { background: rgba(128,128,128,0.15); color: var(--text-secondary); }
+        .stage-pill-regex    { background: rgba(255,82,82,0.15);   color: #FF5252; }
+        .stage-pill-ast      { background: rgba(255,171,0,0.15);   color: #FFAB00; }
+        .stage-pill-namespace{ background: rgba(41,121,255,0.15);  color: #64B5F6; }
+        .stage-pill-attestation { background: rgba(106,27,154,0.15); color: #CE93D8; }
+        .stage-pill-hmac     { background: rgba(0,200,83,0.15);   color: #69F0AE; }
+        .stage-pill-passed   { background: rgba(105,240,174,0.10); color: var(--text-secondary); }
     </style>
 </head>
 <body>
@@ -730,14 +734,11 @@
     <div class="blob blob-1"></div>
     <div class="blob blob-2"></div>
 
-    <!-- HUD Side Text -->
-    <div class="hud hud-left">SYS.ID // SHIELD<br>NODE: GATEWAY</div>
-    <div class="hud hud-right">STATUS // ACTIVE<br>MODE: INTERCEPT</div>
+    <!-- HUD side text removed -->
 
     <!-- Header -->
     <header class="fade-up delay-1">
         <div class="logo-container">
-            <div class="logo-badge">🛡️ SHIELD</div>
             <div>
                 <div class="title-sub">MCP-Secure-Suite</div>
                 <h1>Runtime Security Proxy</h1>
@@ -748,10 +749,7 @@
                 <div class="status-pulse"></div>
                 Live Guard Active
             </div>
-            <label class="switch" id="theme-switch">
-                <input type="checkbox" id="theme-toggle" aria-label="Toggle dark mode">
-                <span class="slider"></span>
-            </label>
+
         </div>
     </header>
 
@@ -780,7 +778,7 @@
         <!-- Logs Panel -->
         <div class="panel">
             <div class="panel-header">
-                <span class="panel-title">🛡️ Security_Logs</span>
+                <span class="panel-title">Security Logs</span>
             </div>
             <div class="table-container">
                 <table>
@@ -790,13 +788,14 @@
                             <th>Server ID</th>
                             <th>Method</th>
                             <th>Payload</th>
+                            <th>Stage</th>
                             <th>Status</th>
                             <th>Duration</th>
                         </tr>
                     </thead>
                     <tbody id="logs-tbody">
                         <tr>
-                            <td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+                            <td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 2rem;">
                                 Waiting for incoming traffic...
                             </td>
                         </tr>
@@ -808,7 +807,7 @@
         <!-- Chart Panel -->
         <div class="panel fade-up delay-4">
             <div class="panel-header">
-                <span class="panel-title">📊 Threat_Vectors</span>
+                <span class="panel-title">Threat Vectors</span>
             </div>
             <div class="chart-wrapper">
                 <canvas id="threatChart"></canvas>
@@ -850,29 +849,8 @@
     </div>
 
     <script>
-        /* ─── Theme Toggle ─── */
-        const themeToggle = document.getElementById('theme-toggle');
-        const currentTheme = document.documentElement.getAttribute('data-theme');
-        themeToggle.checked = currentTheme === 'dark';
-
-        themeToggle.addEventListener('change', (e) => {
-            const theme = e.target.checked ? 'dark' : 'light';
-            document.documentElement.setAttribute('data-theme', theme);
-            localStorage.setItem('shield-theme', theme);
-
-            // Surge animation
-            const switchLabel = themeToggle.closest('.switch');
-            if (switchLabel) {
-                switchLabel.classList.remove('switch-surge');
-                void switchLabel.offsetWidth;
-                switchLabel.classList.add('switch-surge');
-            }
-
-            // Update chart colors
-            if (threatChart) {
-                updateChartTheme(threatChart, theme);
-            }
-        });
+        /* ─── Theme: fixed dark mode ─── */
+        // Theme toggle removed — dashboard defaults to dark mode
 
         /* ─── Chart ─── */
         let threatChart = null;
@@ -940,7 +918,8 @@
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
-                            legend: { display: false }
+                            legend: { display: false },
+                            tooltip: { enabled: true }
                         },
                         scales: {
                             y: {
@@ -1023,7 +1002,7 @@
 
                 const tbody = document.getElementById('logs-tbody');
                 if (data.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 2rem;">No logs found</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 2rem;">No logs found</td></tr>`;
                     return;
                 }
 
@@ -1046,11 +1025,31 @@
                     else if (status === 'SANITIZED') pillClass = 'status-pill-sanitized';
                     else if (status === 'TIMEOUT') pillClass = 'status-pill-timeout';
 
+                    // Extract stage from payload data field if present
+                    let stage = '—';
+                    try {
+                        const parsed = JSON.parse(payload);
+                        if (parsed && parsed.data && parsed.data.stage) {
+                            stage = parsed.data.stage;
+                        }
+                    } catch(e) {}
+                    // Also check log object directly for stage
+                    if (log.stage) stage = log.stage;
+
+                    let stageClass = 'stage-pill-default';
+                    if (stage === 'regex') stageClass = 'stage-pill-regex';
+                    else if (stage === 'ast') stageClass = 'stage-pill-ast';
+                    else if (stage === 'namespace') stageClass = 'stage-pill-namespace';
+                    else if (stage === 'attestation') stageClass = 'stage-pill-attestation';
+                    else if (stage === 'hmac') stageClass = 'stage-pill-hmac';
+                    else if (stage === 'passed') stageClass = 'stage-pill-passed';
+
                     row.innerHTML = `
                         <td class="time-cell">${time}</td>
                         <td><strong>${server}</strong></td>
                         <td><code>${method}</code></td>
                         <td class="payload-cell" title="${payload}">${payload}</td>
+                        <td><span class="stage-pill ${stageClass}">${stage}</span></td>
                         <td><span class="status-pill ${pillClass}">${status}</span></td>
                         <td>${duration}</td>
                     `;
