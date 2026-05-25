@@ -1,0 +1,35 @@
+site_name: MCP-Secure-Suite
+site_url: https://rishitnanda.github.io/mcp_secure/
+repo_url: https://github.com/rishitnanda/mcp_secure
+theme:
+  name: material
+  font:
+    text: Roboto
+    code: Fira Code
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: black
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: black
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Security Layers: security_layers.md
+  - Configuration: configuration.md
+  - Test Results: test_results.md
+  - Limitations: limitations.md
