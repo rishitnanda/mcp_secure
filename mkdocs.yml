@@ -1,6 +1,5 @@
-site_name: MCP-Secure-Suite
+site_name: MCP Secure Suite
 site_url: https://rishitnanda.github.io/mcp_secure/
-repo_url: https://github.com/rishitnanda/mcp_secure
 theme:
   name: material
   font:
@@ -22,9 +21,16 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
   features:
-    - navigation.tabs
     - navigation.sections
     - navigation.top
+
+extra_css:
+  - stylesheets/custom.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/rishitnanda/mcp_secure
 
 nav:
   - Home: index.md
