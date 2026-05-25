@@ -629,7 +629,9 @@
             margin-bottom: 0.5rem;
         }
 
-        .modal-payload-block pre {
+        /* ─── CHANGE 1: Modal pre elements wrap text ─── */
+        .modal-payload-block pre,
+        .modal-content pre {
             background: var(--bg-color);
             border: 1px solid var(--border-color);
             border-radius: 8px;
@@ -637,9 +639,10 @@
             font-family: var(--font-mono);
             font-size: 0.82rem;
             color: var(--text-color);
-            overflow-x: auto;
+            overflow-x: hidden;
             white-space: pre-wrap;
-            word-break: break-all;
+            word-break: break-word;
+            overflow-wrap: break-word;
             max-height: 250px;
             overflow-y: auto;
         }
@@ -734,9 +737,8 @@
     <div class="blob blob-1"></div>
     <div class="blob blob-2"></div>
 
-    <!-- HUD side text removed -->
-
     <!-- Header -->
+    <!-- CHANGE 3: Removed "Run Simulation Tests" button -->
     <header class="fade-up delay-1">
         <div class="logo-container">
             <div>
@@ -749,7 +751,6 @@
                 <div class="status-pulse"></div>
                 Live Guard Active
             </div>
-
         </div>
     </header>
 
@@ -843,15 +844,26 @@
 
             <div class="modal-payload-block">
                 <h4>Raw_Payload</h4>
-                <pre id="modal-payload">—</pre>
+                <pre id="modal-payload" style="max-height: 150px; overflow-y: auto;">—</pre>
+            </div>
+            
+            <!-- CHANGE 2: Stacked vertically (1fr column instead of 1fr 1fr) -->
+            <div style="display: flex; flex-direction: column; gap: 1.5rem; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
+                <div>
+                    <h4 style="margin-bottom: 0.5rem; color: var(--accent-green);">With Shield</h4>
+                    <p style="font-size: 0.8rem; margin-bottom: 0.5rem;">Result: <span id="modal-shield-status" class="status-pill">—</span></p>
+                    <pre id="modal-shield-response">Loading...</pre>
+                </div>
+                <div>
+                    <h4 style="margin-bottom: 0.5rem; color: var(--accent-red);">Without Shield (Raw)</h4>
+                    <p style="font-size: 0.8rem; margin-bottom: 0.5rem;">Result: <span id="modal-direct-status" class="status-pill">—</span></p>
+                    <pre id="modal-direct-response">Loading...</pre>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        /* ─── Theme: fixed dark mode ─── */
-        // Theme toggle removed — dashboard defaults to dark mode
-
         /* ─── Chart ─── */
         let threatChart = null;
 
@@ -880,16 +892,6 @@
                 ],
                 borders: ['#00C853', '#FF1744', '#FFAB00', '#2979FF']
             };
-        }
-
-        function updateChartTheme(chart, theme) {
-            const colors = getChartColors(theme);
-            chart.data.datasets[0].backgroundColor = colors.bars;
-            chart.data.datasets[0].borderColor = colors.borders;
-            chart.options.scales.y.grid.color = colors.grid;
-            chart.options.scales.y.ticks.color = colors.ticks;
-            chart.options.scales.x.ticks.color = colors.ticks;
-            chart.update();
         }
 
         function updateChart(success, blocked, sanitized, timeout) {
@@ -956,7 +958,62 @@
                 ? `${logItem.duration_ms.toFixed(1)} ms`
                 : '—';
             document.getElementById('modal-payload').textContent = logItem.payload || '—';
+            
+            const directEl = document.getElementById('modal-direct-response');
+            const shieldEl = document.getElementById('modal-shield-response');
+            const directStatusEl = document.getElementById('modal-direct-status');
+            const shieldStatusEl = document.getElementById('modal-shield-status');
+            
+            directEl.textContent = 'Executing replay...';
+            shieldEl.textContent = 'Executing replay...';
+            directStatusEl.textContent = '...';
+            shieldStatusEl.textContent = '...';
+            directStatusEl.className = 'status-pill';
+            shieldStatusEl.className = 'status-pill';
+            
             modal.style.display = 'flex';
+            
+            // Replay directly
+            let payloadObj;
+            try {
+                payloadObj = JSON.parse(logItem.payload);
+            } catch (e) {
+                payloadObj = logItem.payload;
+            }
+            
+            fetch('/api/replay-direct', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    payload: payloadObj,
+                    server_id: logItem.server_id
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                const dRes = data.direct_response || data.error || data;
+                const sRes = data.shield_response || {};
+                
+                directEl.textContent = JSON.stringify(dRes, null, 2);
+                shieldEl.textContent = JSON.stringify(sRes, null, 2);
+                
+                directStatusEl.textContent = data.direct_status || 'UNKNOWN';
+                shieldStatusEl.textContent = logItem.status || 'UNKNOWN';
+                
+                if (data.direct_status && data.direct_status.includes('ERROR')) {
+                    directStatusEl.className = 'status-pill status-pill-success';
+                } else {
+                    directStatusEl.className = 'status-pill status-pill-blocked';
+                }
+                
+                if (logItem.status === 'BLOCKED') shieldStatusEl.className = 'status-pill status-pill-blocked';
+                else if (logItem.status === 'SANITIZED') shieldStatusEl.className = 'status-pill status-pill-sanitized';
+                else shieldStatusEl.className = 'status-pill status-pill-success';
+            })
+            .catch(err => {
+                directEl.textContent = 'Failed to load: ' + err.message;
+                shieldEl.textContent = 'Failed to load: ' + err.message;
+            });
         }
 
         function closeModal() {
@@ -1013,7 +1070,7 @@
                     const row = document.createElement('tr');
                     row.setAttribute('data-log-idx', idx);
 
-                    const time = new Date(log.timestamp * 1000).toLocaleTimeString();
+                    const time = new Date(log.timestamp * 1000).toLocaleString();
                     const server = log.server_id;
                     const method = log.method;
                     const payload = log.payload;
@@ -1025,7 +1082,6 @@
                     else if (status === 'SANITIZED') pillClass = 'status-pill-sanitized';
                     else if (status === 'TIMEOUT') pillClass = 'status-pill-timeout';
 
-                    // Extract stage from payload data field if present
                     let stage = '—';
                     try {
                         const parsed = JSON.parse(payload);
@@ -1033,7 +1089,6 @@
                             stage = parsed.data.stage;
                         }
                     } catch(e) {}
-                    // Also check log object directly for stage
                     if (log.stage) stage = log.stage;
 
                     let stageClass = 'stage-pill-default';

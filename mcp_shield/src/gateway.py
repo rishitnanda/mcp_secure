@@ -326,6 +326,113 @@ async def get_logs():
     # Returns last 50 log rows from SQLite as JSON
     return await db_manager.get_logs(limit=50)
 
+@app.post("/api/run-tests")
+async def run_tests():
+    # Define the 3 test payloads matching demo.sh
+    tests = [
+        {
+            "name": "E1: Command Injection",
+            "server_id": "trusted-server",
+            "payload": {
+                "jsonrpc": "2.0",
+                "id": "demo-e1",
+                "method": "execute_code",
+                "params": {
+                    "code": "import os; os.system(\"rm -rf /\")"
+                }
+            }
+        },
+        {
+            "name": "E3: Indirect Prompt Injection",
+            "server_id": "adversarial-server",
+            "payload": {
+                "jsonrpc": "2.0",
+                "id": "demo-e3",
+                "method": "tools/call",
+                "params": {
+                    "name": "trigger_injection",
+                    "arguments": {}
+                }
+            }
+        },
+        {
+            "name": "E4: Unauthorized Sampling",
+            "server_id": "adversarial-server",
+            "payload": {
+                "jsonrpc": "2.0",
+                "id": "demo-e4",
+                "method": "tools/call",
+                "params": {
+                    "name": "escalate_sampling",
+                    "arguments": {}
+                }
+            }
+        }
+    ]
+
+    results = []
+    for test in tests:
+        body_bytes = json.dumps(test["payload"]).encode("utf-8")
+        headers = {"x-mcpsec-server-id": test["server_id"]}
+        
+        # Request via Shield
+        shield_url = "http://127.0.0.1:8000/mcp"
+        shield_res = await forward_request(shield_url, body_bytes, headers)
+        
+        # Request via Direct (Raw Mock Server)
+        direct_url = MOCK_SERVER_URLS.get(test["server_id"])
+        if direct_url:
+            direct_res = await forward_request(direct_url, body_bytes, headers)
+        else:
+            direct_res = {"error": "Mock server URL not found"}
+
+        results.append({
+            "test_name": test["name"],
+            "payload": test["payload"],
+            "shield_response": shield_res,
+            "direct_response": direct_res
+        })
+        
+    return JSONResponse(status_code=200, content={"results": results})
+
+@app.post("/api/replay-direct")
+async def replay_direct(request: Request):
+    try:
+        body = await request.json()
+        payload = body.get("payload")
+        server_id = body.get("server_id")
+        
+        if not payload or not server_id:
+            return JSONResponse(status_code=400, content={"error": "Missing payload or server_id"})
+            
+        if isinstance(payload, str):
+            body_bytes = payload.encode("utf-8")
+        else:
+            body_bytes = json.dumps(payload).encode("utf-8")
+            
+        headers = {"x-mcpsec-server-id": server_id}
+        
+        # 1. Replay against direct server
+        direct_url = MOCK_SERVER_URLS.get(server_id)
+        if direct_url:
+            direct_res = await forward_request(direct_url, body_bytes, headers)
+            direct_status = "ERROR" if "error" in direct_res else "SUCCESS (BYPASSED)"
+        else:
+            direct_res = {"error": f"Mock server URL not found for {server_id}"}
+            direct_status = "NOT FOUND"
+            
+        # 2. Replay against shield
+        shield_url = "http://127.0.0.1:8000/mcp"
+        shield_res = await forward_request(shield_url, body_bytes, headers)
+        
+        return JSONResponse(status_code=200, content={
+            "direct_response": direct_res,
+            "direct_status": direct_status,
+            "shield_response": shield_res
+        })
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 # Mount the static dashboard directory at /dashboard
 app.mount(
     "/dashboard",
