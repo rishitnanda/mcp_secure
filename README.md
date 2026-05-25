@@ -4,7 +4,7 @@ A dual-layer security proxy for the Model Context Protocol (MCP). Built as an op
 
 MCP has three documented protocol-level vulnerabilities — capability escalation, unauthenticated sampling, and implicit cross-server trust propagation. This suite blocks all three, plus code injection and indirect prompt injection, at the protocol boundary before anything reaches the host system.
 
-**[📚 View the full documentation here](https://rishitnanda.github.io/mcp_secure/)**
+**[Click here for full documentation.](https://rishitnanda.github.io/mcp_secure/)**
 
 ---
 
@@ -39,8 +39,6 @@ The admin dashboard is at `http://localhost:8000/dashboard/` once the stack is r
 ---
 
 ## References
-
-For deep dives into the architecture, security layers, configuration, test results, and limitations, please see our [documentation site](https://rishitnanda.github.io/mcp_secure/).
 
 Maloyan, N. & Namiot, D. (2026). *Breaking the Protocol: Security Analysis of the Model Context Protocol Specification and Prompt Injection Vulnerabilities in Tool-Integrated LLM Agents*. arXiv:2601.17549v1 [cs.CR].
 
