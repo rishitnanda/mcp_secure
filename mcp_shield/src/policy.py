@@ -16,18 +16,18 @@ from cryptography.exceptions import InvalidSignature
 
 from mcp_shield.src.schemas import (
     JSONRPCRequest,
-    JSONRPCResponse,
     CapabilityCert,
     MCPSecHeader,
     PolicyResult
 )
+# NOTE: JSONRPCResponse and MethodNotFoundException are intentionally excluded —
+# they are not used in the policy engine and were dead imports (Problems 10, 11).
 from mcp_shield.src.exceptions import (
     MCPShieldException,
     PolicyViolationException,
     ASTValidationException,
     NamespaceViolationException,
     CapabilityViolationException,
-    MethodNotFoundException
 )
 
 class ConnectionState:
@@ -107,6 +107,11 @@ class PolicyEngine:
     def __init__(self, config_path: str = "config/shield_config.json"):
         self.config_path = config_path
         self.config: Dict[str, Any] = {}
+        # NOTE: nonce_window is intentionally preserved across load_config() calls.
+        # If the engine were ever re-instantiated (e.g. in tests), each instance gets
+        # a fresh window — which is correct for test isolation but means production
+        # restarts lose the nonce history. This is acceptable since the 30s TTL
+        # makes replays from before a restart irrelevant (Problem 13).
         self.nonce_window = NonceWindow()
         self.load_config()
 
@@ -242,17 +247,25 @@ class PolicyEngine:
                 )
 
         # 4. AST scan (only if a code param is present)
-        arguments = {}
-        if request.params and isinstance(request.params, dict):
-            arguments = request.params.get("arguments", {}) or {}
-
+        # Mirrors the two-level extraction in gateway.py: check top-level params first,
+        # then params.arguments. Without this, a payload using top-level 'code' would
+        # pass the AST scan but still reach the executor (Problem 12).
         code_param_names = self.config.get("code_param_names", ["code", "script", "py_code", "python_code", "command"])
         code_to_scan = None
-        if isinstance(arguments, dict):
+        if isinstance(request.params, dict):
+            # Check top-level params first (e.g. {"method": "execute_code", "params": {"code": ...}})
             for key in code_param_names:
-                if key in arguments and isinstance(arguments[key], str):
-                    code_to_scan = arguments[key]
+                if key in request.params and isinstance(request.params[key], str):
+                    code_to_scan = request.params[key]
                     break
+            # Fall through to params.arguments if not found at top level
+            if not code_to_scan:
+                arguments = request.params.get("arguments", {}) or {}
+                if isinstance(arguments, dict):
+                    for key in code_param_names:
+                        if key in arguments and isinstance(arguments[key], str):
+                            code_to_scan = arguments[key]
+                            break
 
         if code_to_scan is not None:
             try:

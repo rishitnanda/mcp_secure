@@ -5,6 +5,8 @@ import time
 import os
 from typing import List, Optional
 
+from pydantic import ValidationError
+
 from mcp_shield.src.schemas import JSONRPCRequest, MCPSecHeader
 from mcp_shield.src.policy import PolicyEngine, ConnectionState
 from mcp_shield.src.database import DatabaseManager
@@ -176,8 +178,10 @@ async def server_to_client_loop(
                             exit_code=None,
                             server_id=conn_state.server_id or "unknown"
                         )
-                        # Drop session on invalid certificate attestation
-                        os._exit(1)
+                        # Drop session on invalid certificate attestation.
+                        # Use SystemExit instead of os._exit to allow async tasks
+                        # (including pending log writes) to flush cleanly (Problem 16).
+                        raise SystemExit(1)
                     else:
                         conn_state.verified_capabilities = cert_json.get("capabilities", [])
                         conn_state.cert_expiry = cert_json.get("expires_at")

@@ -1,4 +1,5 @@
 #!/bin/bash
+rm -f telemetry.db
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 
 echo -e "${BLUE}=====================================================================${NC}"
@@ -42,7 +43,7 @@ echo -e "\n${BLUE}[E2 Clean Execution — should PASS through]${NC}"
 resp=$(curl -s -X POST http://127.0.0.1:8000/mcp \
   -H "Content-Type: application/json" -H "x-mcpsec-server-id: trusted-server" \
   -d '{"jsonrpc":"2.0","id":"e2","method":"execute_code","params":{"code":"print(2+2)"}}')
-if echo "$resp" | grep -q '"exit_code": 0\|"exit_code":0'; then
+if echo "$resp" | grep -qE '"exit_code":\s*0'; then
     echo -e "${GREEN}  ✓ ALLOWED — Clean code executed in sandbox, exit_code=0${NC}"; PASS=$((PASS+1))
 else
     echo -e "${RED}  ✗ UNEXPECTED — Clean code was blocked or errored${NC}"; FAIL=$((FAIL+1))

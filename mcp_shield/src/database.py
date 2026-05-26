@@ -7,40 +7,48 @@ from typing import Dict, Any, Optional
 class DatabaseManager:
     def __init__(self, db_path: str = "telemetry.db"):
         self.db_path = db_path
+        self._db: Optional[aiosqlite.Connection] = None
         self._initialized = False
 
     async def init_db(self):
-        """Initializes the database schema and sets performance pragmas."""
+        """Initializes a persistent aiosqlite connection and sets up the schema.
+        
+        A single connection is held for the lifetime of the process instead of
+        opening a new connection per write. This eliminates 100-conn open/close
+        cycles under concurrent load (Problem 2).
+        """
         try:
-            # We connect dynamically per operation to support concurrent handles
-            async with aiosqlite.connect(self.db_path) as db:
-                # WAL allows concurrent reads and writes without lock exception crashes
-                await db.execute("PRAGMA journal_mode=WAL;")
-                # NORMAL reduces sync cycles without compromising write durability in WAL mode
-                await db.execute("PRAGMA synchronous=NORMAL;")
-                
-                # Drop existing table to ensure fresh database on every run
-                await db.execute("DROP TABLE IF EXISTS logs;")
-                
-                await db.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS logs (
-                        id TEXT PRIMARY KEY,
-                        timestamp REAL,
-                        method TEXT,
-                        payload TEXT,
-                        status TEXT,
-                        duration_ms REAL,
-                        exit_code INTEGER,
-                        server_id TEXT
-                    );
-                    """
-                )
-                await db.commit()
+            self._db = await aiosqlite.connect(self.db_path)
+            # WAL allows concurrent reads and writes without lock exception crashes
+            await self._db.execute("PRAGMA journal_mode=WAL;")
+            # NORMAL reduces sync cycles without compromising write durability in WAL mode
+            await self._db.execute("PRAGMA synchronous=NORMAL;")
+
+            await self._db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS logs (
+                    id TEXT PRIMARY KEY,
+                    timestamp REAL,
+                    method TEXT,
+                    payload TEXT,
+                    status TEXT,
+                    duration_ms REAL,
+                    exit_code INTEGER,
+                    server_id TEXT
+                );
+                """
+            )
+            await self._db.commit()
             self._initialized = True
         except Exception as e:
             print(f"Database initialization failed: {e}", file=sys.stderr)
             raise e
+
+    async def close(self):
+        """Closes the persistent database connection cleanly during lifespan shutdown."""
+        if self._db:
+            await self._db.close()
+            self._db = None
 
     async def _write_log(
         self,
@@ -52,17 +60,18 @@ class DatabaseManager:
         exit_code: Optional[int],
         server_id: str
     ):
-        """Background worker to perform the actual write."""
+        """Background worker to perform the actual write using the persistent connection."""
+        if not self._db:
+            return
         try:
-            async with aiosqlite.connect(self.db_path) as db:
-                await db.execute(
-                    """
-                    INSERT INTO logs (id, timestamp, method, payload, status, duration_ms, exit_code, server_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-                    """,
-                    (request_id, time.time(), method, payload, status, duration_ms, exit_code, server_id)
-                )
-                await db.commit()
+            await self._db.execute(
+                """
+                INSERT INTO logs (id, timestamp, method, payload, status, duration_ms, exit_code, server_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (request_id, time.time(), method, payload, status, duration_ms, exit_code, server_id)
+            )
+            await self._db.commit()
         except Exception as e:
             print(f"Async database write failed: {e}", file=sys.stderr)
 
@@ -80,7 +89,13 @@ class DatabaseManager:
         
         Returns the asyncio Task to allow waiting in tests, but in production 
         this is called without awaiting to keep the hot path non-blocking.
+
+        Guard: if init_db has not completed (possible in test isolation), returns
+        a no-op task to prevent unhandled task exceptions (Problem 3).
         """
+        if not self._initialized:
+            # No-op guard: DB not ready, swallow silently
+            return asyncio.create_task(asyncio.sleep(0))
         # Fire-and-forget task registration to avoid slowing request proxy pathways
         task = asyncio.create_task(
             self._write_log(request_id, method, payload, status, duration_ms, exit_code, server_id)
@@ -88,35 +103,33 @@ class DatabaseManager:
         return task
 
     async def get_metrics(self) -> Dict[str, int]:
-        """Retrieves aggregation counts by status."""
+        """Retrieves aggregation counts by status using the persistent connection."""
         metrics = {"SUCCESS": 0, "BLOCKED": 0, "TIMEOUT": 0, "SANITIZED": 0}
+        if not self._db:
+            return metrics
         try:
-            async with aiosqlite.connect(self.db_path) as db:
-                async with db.execute(
-                    "SELECT status, COUNT(*) FROM logs GROUP BY status;"
-                ) as cursor:
-                    rows = await cursor.fetchall()
-                    for status, count in rows:
-                        if status in metrics:
-                            metrics[status] = count
-                        else:
-                            metrics[status] = count
+            async with self._db.execute(
+                "SELECT status, COUNT(*) FROM logs GROUP BY status;"
+            ) as cursor:
+                rows = await cursor.fetchall()
+                for status, count in rows:
+                    metrics[status] = count
         except Exception as e:
             print(f"Database metrics query failed: {e}", file=sys.stderr)
         return metrics
 
     async def get_logs(self, limit: int = 50) -> list:
-        """Retrieves the last N logs from the database, ordered by timestamp descending."""
+        """Retrieves the last N logs from the database using the persistent connection."""
+        if not self._db:
+            return []
         try:
-            async with aiosqlite.connect(self.db_path) as db:
-                db.row_factory = aiosqlite.Row
-                async with db.execute(
-                    "SELECT id, timestamp, method, payload, status, duration_ms, exit_code, server_id FROM logs ORDER BY timestamp DESC LIMIT ?;",
-                    (limit,)
-                ) as cursor:
-                    rows = await cursor.fetchall()
-                    return [dict(row) for row in rows]
+            self._db.row_factory = aiosqlite.Row
+            async with self._db.execute(
+                "SELECT id, timestamp, method, payload, status, duration_ms, exit_code, server_id FROM logs ORDER BY timestamp DESC LIMIT ?;",
+                (limit,)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
         except Exception as e:
             print(f"Database logs query failed: {e}", file=sys.stderr)
             return []
-

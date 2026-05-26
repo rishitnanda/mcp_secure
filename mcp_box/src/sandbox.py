@@ -36,12 +36,12 @@ class DockerSandbox:
                 try:
                     logger.info(f"Pruning container: {container.id}")
                     container.kill()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to kill container {container.id[:12]}: {e}")
                 try:
                     container.remove(force=True)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to remove container {container.id[:12]}: {e}")
         except Exception as e:
             logger.error(f"Error pruning containers: {e}")
 
@@ -177,6 +177,9 @@ class DockerSandbox:
             # NOTE: This is a source-code keyword check, not real network isolation.
             # Real isolation is enforced by Docker network_mode="none".
             # This mock only approximates the behaviour for CI without Docker.
+            # NOTE: The Policy engine's AST scanner blocks urllib/socket imports before
+            # reaching the sandbox entirely — this check is defence-in-depth for mock
+            # mode only and should not be relied upon as the primary security control (Problem 17).
             if "urllib" in code or "requests" in code or "socket" in code:
                 return {
                     "exit_code": 1,
