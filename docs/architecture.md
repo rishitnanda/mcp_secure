@@ -17,7 +17,7 @@ sequenceDiagram
 
     Client->>Shield: JSON-RPC tools/call
     Note over Shield: HMAC → Attestation → Regex → AST → Namespace
-    alt Policy violation
+    alt <font color="white">Policy violation</font>
         Shield-->>Client: JSON-RPC error (-32602 / -32601)
     else <font color="white">Code execution</font>
         Shield->>Sandbox: execute(code)
