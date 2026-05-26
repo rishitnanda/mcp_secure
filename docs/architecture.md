@@ -19,12 +19,12 @@ sequenceDiagram
     Note over Shield: HMAC → Attestation → Regex → AST → Namespace
     alt Policy violation
         Shield-->>Client: JSON-RPC error (-32602 / -32601)
-    else Code execution
+    else <font color="white">Code execution</font>
         Shield->>Sandbox: execute(code)
         Note over Sandbox: Alpine container, network_mode=none, 2s timeout
         Sandbox-->>Shield: {exit_code, logs, status, duration_ms}
         Shield-->>Client: result
-    else Standard tool call
+    else <font color="white">Standard tool call</font>
         Shield->>Server: forward request
         Server-->>Shield: response
         Note over Shield: Output sanitizer, namespace filter
