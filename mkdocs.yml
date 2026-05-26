@@ -33,3 +33,10 @@ nav:
   - Configuration: configuration.md
   - Test Results: test_results.md
   - Limitations: limitations.md
+
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
