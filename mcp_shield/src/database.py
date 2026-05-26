@@ -18,6 +18,10 @@ class DatabaseManager:
                 await db.execute("PRAGMA journal_mode=WAL;")
                 # NORMAL reduces sync cycles without compromising write durability in WAL mode
                 await db.execute("PRAGMA synchronous=NORMAL;")
+                
+                # Drop existing table to ensure fresh database on every run
+                await db.execute("DROP TABLE IF EXISTS logs;")
+                
                 await db.execute(
                     """
                     CREATE TABLE IF NOT EXISTS logs (

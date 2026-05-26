@@ -9,6 +9,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - .:/workspace
+      - /tmp:/tmp
     environment:
       - TRUSTED_SERVER_URL=http://mock-trusted-server:8001/mcp
       - ADVERSARIAL_SERVER_URL=http://mock-adversarial-server:8002/mcp

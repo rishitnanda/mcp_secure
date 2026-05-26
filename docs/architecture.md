@@ -9,6 +9,7 @@ Two components, both required:
 **MCP-Box** handles code execution. When Shield clears an `execute_code` call, it dispatches the payload to Box rather than running it directly. Box spins up a one-shot Alpine container with no network access, a 128MB memory cap, and a 2-second watchdog. The container is force-removed after every execution regardless of outcome.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'loopTextColor': 'var(--md-default-fg-color)'}}}%%
 sequenceDiagram
     participant Client as AI Client
     participant Shield as MCP-Shield
@@ -17,14 +18,14 @@ sequenceDiagram
 
     Client->>Shield: JSON-RPC tools/call
     Note over Shield: HMAC → Attestation → Regex → AST → Namespace
-    alt <font color="white">Policy violation</font>
+    alt Policy violation
         Shield-->>Client: JSON-RPC error (-32602 / -32601)
-    else <font color="white">Code execution</font>
+    else Code execution
         Shield->>Sandbox: execute(code)
         Note over Sandbox: Alpine container, network_mode=none, 2s timeout
         Sandbox-->>Shield: {exit_code, logs, status, duration_ms}
         Shield-->>Client: result
-    else <font color="white">Standard tool call</font>
+    else Standard tool call
         Shield->>Server: forward request
         Server-->>Shield: response
         Note over Shield: Output sanitizer, namespace filter

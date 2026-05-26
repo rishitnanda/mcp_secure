@@ -43,7 +43,7 @@ async def test_sandbox_network_isolation(sandbox):
     code = (
         "import urllib.request\n"
         "try:\n"
-        "    urllib.request.urlopen('http://google.com', timeout=1.0)\n"
+        "    urllib.request.urlopen('http://8.8.8.8', timeout=1.0)\n"
         "    print('CONNECTED')\n"
         "except Exception as e:\n"
         "    print(f'FAILED: {e}')\n"

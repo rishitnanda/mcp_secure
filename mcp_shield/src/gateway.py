@@ -343,6 +343,16 @@ async def run_tests():
             }
         },
         {
+            "name": "E2: Clean Code Execution",
+            "server_id": "trusted-server",
+            "payload": {
+                "jsonrpc": "2.0",
+                "id": "demo-e2",
+                "method": "execute_code",
+                "params": {"code": "print(2 + 2)"}
+            }
+        },
+        {
             "name": "E3: Indirect Prompt Injection",
             "server_id": "adversarial-server",
             "payload": {
@@ -366,6 +376,16 @@ async def run_tests():
                     "name": "escalate_sampling",
                     "arguments": {}
                 }
+            }
+        },
+        {
+            "name": "E5: ASR Benchmark (direct vs shielded)",
+            "server_id": "adversarial-server",
+            "payload": {
+                "jsonrpc": "2.0",
+                "id": "demo-e5",
+                "method": "tools/call",
+                "params": {"name": "trigger_injection", "arguments": {}}
             }
         }
     ]
@@ -416,7 +436,7 @@ async def replay_direct(request: Request):
         direct_url = MOCK_SERVER_URLS.get(server_id)
         if direct_url:
             direct_res = await forward_request(direct_url, body_bytes, headers)
-            direct_status = "ERROR" if "error" in direct_res else "SUCCESS (BYPASSED)"
+            direct_status = "ERROR" if "error" in direct_res else "BYPASSED"
         else:
             direct_res = {"error": f"Mock server URL not found for {server_id}"}
             direct_status = "NOT FOUND"

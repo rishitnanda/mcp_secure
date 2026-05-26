@@ -526,6 +526,7 @@
             width: 100%;
             height: 35vh;
             position: relative;
+            padding-right: 1.5rem;
         }
 
         /* ─── Log Detail Modal ─── */
@@ -789,7 +790,6 @@
                             <th>Server ID</th>
                             <th>Method</th>
                             <th>Payload</th>
-                            <th>Stage</th>
                             <th>Status</th>
                             <th>Duration</th>
                         </tr>
@@ -839,6 +839,17 @@
                 <section>
                     <h4>Duration</h4>
                     <p id="modal-duration">—</p>
+                </section>
+            </div>
+
+            <div class="modal-detail-grid" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                <section>
+                    <h4>Attack Vector</h4>
+                    <p id="modal-vector-name" style="font-weight: bold; color: var(--accent-color);">—</p>
+                </section>
+                <section>
+                    <h4>Description</h4>
+                    <p id="modal-vector-desc">—</p>
                 </section>
             </div>
 
@@ -900,38 +911,53 @@
             const colors = getChartColors(theme);
 
             if (threatChart) {
-                threatChart.data.datasets[0].data = [success, blocked, sanitized, timeout];
+                threatChart.data.datasets[0].data = [success, blocked + sanitized, 0, timeout];
+                threatChart.data.datasets[1].data = [success, 0, blocked + sanitized, timeout];
                 threatChart.update();
             } else {
                 threatChart = new Chart(ctx, {
                     type: 'bar',
                     data: {
-                        labels: ['Success', 'Blocked', 'Sanitized', 'Timeout'],
-                        datasets: [{
-                            label: 'Events Count',
-                            data: [success, blocked, sanitized, timeout],
-                            backgroundColor: colors.bars,
-                            borderColor: colors.borders,
-                            borderWidth: 1.5,
-                            borderRadius: 6
-                        }]
+                        labels: ['Clean/Safe', 'Mitigated', 'Bypassed', 'Timeout'],
+                        datasets: [
+                            {
+                                label: 'With Shield Active',
+                                data: [success, blocked + sanitized, 0, timeout],
+                                backgroundColor: colors.bars[0],
+                                borderColor: colors.borders[0],
+                                borderWidth: 1.5,
+                                borderRadius: 6
+                            },
+                            {
+                                label: 'Without Shield (Simulated)',
+                                data: [success, 0, blocked + sanitized, timeout],
+                                backgroundColor: theme === 'dark' ? 'rgba(255, 82, 82, 0.15)' : 'rgba(255, 23, 68, 0.1)',
+                                borderColor: theme === 'dark' ? 'rgba(255, 82, 82, 0.4)' : 'rgba(255, 23, 68, 0.3)',
+                                borderWidth: 1.5,
+                                borderDash: [5, 5],
+                                borderRadius: 6
+                            }
+                        ]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
-                            legend: { display: false },
+                            legend: { 
+                                display: true,
+                                labels: { color: colors.ticks, font: { family: 'var(--font-display)' } }
+                            },
                             tooltip: { enabled: true }
                         },
                         scales: {
                             y: {
                                 beginAtZero: true,
                                 grid: { color: colors.grid },
-                                ticks: { color: colors.ticks }
+                                ticks: { color: colors.ticks, stepSize: 1 }
                             },
                             x: {
                                 grid: { display: false },
-                                ticks: { color: colors.ticks }
+                                ticks: { color: colors.ticks, font: { size: 10 } }
                             }
                         }
                     }
@@ -950,14 +976,33 @@
             document.getElementById('modal-time').textContent = logItem.timestamp
                 ? new Date(logItem.timestamp * 1000).toLocaleString()
                 : '—';
-            document.getElementById('modal-status').innerHTML = logItem.status
-                ? `<span class="status-pill status-pill-${logItem.status.toLowerCase()}">${logItem.status}</span>`
-                : '—';
+            
+            let displayStatus = 'FAIL';
+            let statusPillClass = 'status-pill-blocked';
+            if (logItem.status === 'SUCCESS' || logItem.status === 'BLOCKED' || logItem.status === 'SANITIZED') {
+                displayStatus = 'PASS';
+                statusPillClass = 'status-pill-success';
+            }
+            document.getElementById('modal-status').innerHTML = `<span class="status-pill ${statusPillClass}">${displayStatus}</span>`;
+
             document.getElementById('modal-server').textContent = logItem.server_id || '—';
             document.getElementById('modal-duration').textContent = logItem.duration_ms
                 ? `${logItem.duration_ms.toFixed(1)} ms`
                 : '—';
             document.getElementById('modal-payload').textContent = logItem.payload || '—';
+            
+            let vectorName = 'Unknown Payload';
+            let vectorDesc = 'No description available for this request.';
+            const lid = String(logItem.id).toLowerCase().replace('demo-', '');
+            if (lid === 'e1') { vectorName = 'E1: Command Injection'; vectorDesc = 'Malicious rm -rf command blocked via AST policy before execution.'; }
+            else if (lid === 'e2') { vectorName = 'E2: Clean Execution'; vectorDesc = 'Safe code executed successfully inside the isolated sandbox.'; }
+            else if (lid === 'e3') { vectorName = 'E3: Indirect Prompt Injection'; vectorDesc = 'Malicious payload detected in tool output and securely redacted.'; }
+            else if (lid === 'e4') { vectorName = 'E4: Capability Escalation'; vectorDesc = 'Adversarial server requested unauthorized privilege escalation.'; }
+            else if (lid === '999') { vectorName = 'Secondary Callback (E4)'; vectorDesc = 'Shield actively blocked the unauthorized sampling/createMessage request.'; }
+            else if (lid === 'e5') { vectorName = 'E5: ASR Benchmark'; vectorDesc = 'Attack Success Rate benchmark payload evaluated through the shield.'; }
+            
+            document.getElementById('modal-vector-name').textContent = vectorName;
+            document.getElementById('modal-vector-desc').textContent = vectorDesc;
             
             const directEl = document.getElementById('modal-direct-response');
             const shieldEl = document.getElementById('modal-shield-response');
@@ -1077,35 +1122,20 @@
                     const status = log.status;
                     const duration = log.duration_ms ? `${log.duration_ms.toFixed(1)} ms` : '-';
 
-                    let pillClass = 'status-pill-success';
-                    if (status === 'BLOCKED') pillClass = 'status-pill-blocked';
-                    else if (status === 'SANITIZED') pillClass = 'status-pill-sanitized';
-                    else if (status === 'TIMEOUT') pillClass = 'status-pill-timeout';
-
-                    let stage = '—';
-                    try {
-                        const parsed = JSON.parse(payload);
-                        if (parsed && parsed.data && parsed.data.stage) {
-                            stage = parsed.data.stage;
-                        }
-                    } catch(e) {}
-                    if (log.stage) stage = log.stage;
-
-                    let stageClass = 'stage-pill-default';
-                    if (stage === 'regex') stageClass = 'stage-pill-regex';
-                    else if (stage === 'ast') stageClass = 'stage-pill-ast';
-                    else if (stage === 'namespace') stageClass = 'stage-pill-namespace';
-                    else if (stage === 'attestation') stageClass = 'stage-pill-attestation';
-                    else if (stage === 'hmac') stageClass = 'stage-pill-hmac';
-                    else if (stage === 'passed') stageClass = 'stage-pill-passed';
+                    let displayStatus = 'FAIL';
+                    let pillClass = 'status-pill-blocked';
+                    
+                    if (status === 'SUCCESS' || status === 'BLOCKED' || status === 'SANITIZED') {
+                        displayStatus = 'PASS';
+                        pillClass = 'status-pill-success';
+                    }
 
                     row.innerHTML = `
                         <td class="time-cell">${time}</td>
                         <td><strong>${server}</strong></td>
                         <td><code>${method}</code></td>
-                        <td class="payload-cell" title="${payload}">${payload}</td>
-                        <td><span class="stage-pill ${stageClass}">${stage}</span></td>
-                        <td><span class="status-pill ${pillClass}">${status}</span></td>
+                        <td class="payload-cell" title="${payload.replace(/"/g, '&quot;')}">${payload}</td>
+                        <td><span class="status-pill ${pillClass}">${displayStatus}</span></td>
                         <td>${duration}</td>
                     `;
                     tbody.appendChild(row);
