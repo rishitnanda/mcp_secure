@@ -55,8 +55,6 @@ async def test_sandbox_network_isolation(sandbox):
 @pytest.mark.asyncio
 async def test_sandbox_oom_limit(sandbox):
     # B4: Allocating more than 128MB RAM should trigger OOM / crash
-    # NOTE: OOM behaviour in mock mode is OS/allocator dependent.
-    # Docker mem_limit="128m" provides deterministic enforcement.
     print(f"\n[INFO] Running test_sandbox_oom_limit. Mock Mode: {sandbox.use_mock}")
     code = "x = [0] * 50_000_000\nprint(len(x))"
     result = await sandbox.execute(code)

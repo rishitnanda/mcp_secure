@@ -20,8 +20,6 @@ from mcp_shield.src.schemas import (
     MCPSecHeader,
     PolicyResult
 )
-# NOTE: JSONRPCResponse and MethodNotFoundException are intentionally excluded —
-# they are not used in the policy engine and were dead imports (Problems 10, 11).
 from mcp_shield.src.exceptions import (
     MCPShieldException,
     PolicyViolationException,
@@ -108,10 +106,6 @@ class PolicyEngine:
         self.config_path = config_path
         self.config: Dict[str, Any] = {}
         # NOTE: nonce_window is intentionally preserved across load_config() calls.
-        # If the engine were ever re-instantiated (e.g. in tests), each instance gets
-        # a fresh window — which is correct for test isolation but means production
-        # restarts lose the nonce history. This is acceptable since the 30s TTL
-        # makes replays from before a restart irrelevant (Problem 13).
         self.nonce_window = NonceWindow()
         self.load_config()
 
@@ -247,9 +241,6 @@ class PolicyEngine:
                 )
 
         # 4. AST scan (only if a code param is present)
-        # Mirrors the two-level extraction in gateway.py: check top-level params first,
-        # then params.arguments. Without this, a payload using top-level 'code' would
-        # pass the AST scan but still reach the executor (Problem 12).
         code_param_names = self.config.get("code_param_names", ["code", "script", "py_code", "python_code", "command"])
         code_to_scan = None
         if isinstance(request.params, dict):

@@ -14,8 +14,6 @@ def is_port_open(port):
 
 @pytest.fixture(scope="module", autouse=True)
 def run_servers():
-    # Use sys.executable instead of a hardcoded .venv path so tests work
-    # on any machine regardless of where the venv is located (Problem 21).
     gateway_proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "mcp_shield.src.gateway:app", "--host", "127.0.0.1", "--port", "8000"],
         stdout=subprocess.PIPE,
@@ -87,7 +85,7 @@ def query_db_with_retry(query, params, expected_status, max_retries=15, delay=0.
     """Retries querying sqlite to avoid asynchronous race conditions with the background log task.
     
     Always closes the connection in a finally block to prevent handle leaks under
-    exceptions mid-loop (Problem 19).
+    exceptions mid-loop.
     """
     for _ in range(max_retries):
         conn = sqlite3.connect("telemetry.db")
@@ -214,9 +212,6 @@ def test_e4_sampling_injection_blocked():
     # Shield response must indicate that the sampling callback was blocked with CapabilityViolation
     assert "capability" in text.lower() or "error" in text.lower() or "violation" in text.lower()
 
-    # Query DB with retry to check that the blocked sampling status is written.
-    # E4 requires two HTTP round trips before the secondary callback log (id=999) exists,
-    # so we use higher retry count + longer delay here (Problem 20).
     row = query_db_with_retry(
         "SELECT status, method FROM logs WHERE id = '999' AND status = 'BLOCKED' ORDER BY timestamp DESC LIMIT 1",
         (),

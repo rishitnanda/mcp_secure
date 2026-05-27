@@ -27,7 +27,6 @@ from mcp_box.src.sandbox import DockerSandbox
 db_manager = DatabaseManager()
 # NOTE: PolicyEngine.__init__ calls load_config() internally.
 # The explicit load_config() call in lifespan is intentional for hot-reload semantics
-# only — it allows refreshing config without restarting the process (Problem 14).
 policy_engine = PolicyEngine()
 sandbox_manager: Optional[DockerSandbox] = None
 
@@ -41,7 +40,7 @@ MOCK_SERVER_URLS = {
 async def forward_request(url: str, body_bytes: bytes, headers: dict) -> dict:
     """Forwards the JSON-RPC request to the target server URL using httpx.AsyncClient.
     
-    Uses native async HTTP instead of urllib in a thread executor (Problem 5).
+    Uses native async HTTP instead of urllib in a thread executor.
     """
     async with httpx.AsyncClient() as client:
         try:
@@ -72,13 +71,13 @@ async def lifespan(app: FastAPI):
     # Lifespan: initialize database with persistent connection
     await db_manager.init_db()
     # Intentional hot-reload call — load_config() is also called in PolicyEngine.__init__
-    # but re-calling here ensures any config changes since startup are reflected (Problem 14).
+    # but re-calling here ensures any config changes since startup are reflected.
     policy_engine.load_config()
-    # Run blocking DockerSandbox constructor in executor to avoid blocking event loop (Problem 6)
+    # Run blocking DockerSandbox constructor in executor to avoid blocking event loop
     loop = asyncio.get_running_loop()
     sandbox_manager = await loop.run_in_executor(None, DockerSandbox)
     yield
-    # Close persistent database connection cleanly on shutdown (Problem 2)
+    # Close persistent database connection cleanly on shutdown
     await db_manager.close()
 
 
@@ -409,7 +408,7 @@ async def run_tests():
         body_bytes = json.dumps(test["payload"]).encode("utf-8")
         headers = {"x-mcpsec-server-id": test["server_id"]}
 
-        # Evaluate directly through policy engine to avoid HTTP self-loop (Problem 4)
+        # Evaluate directly through policy engine to avoid HTTP self-loop
         try:
             rpc = JSONRPCRequest.model_validate(test["payload"])
             conn = ConnectionState(server_id=test["server_id"])
