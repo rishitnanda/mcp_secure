@@ -18,20 +18,18 @@ def run_servers():
     # on any machine regardless of where the venv is located (Problem 21).
     gateway_proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "mcp_shield.src.gateway:app", "--host", "127.0.0.1", "--port", "8000"],
-        stdout=None,
-        stderr=None
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
     )
-    # Start trusted server (running on port 8001)
     trusted_proc = subprocess.Popen(
-        [".venv/bin/python", "mock_servers/trusted_server.py"],
-        stdout=None,
-        stderr=None
+        [sys.executable, "mock_servers/trusted_server.py"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
     )
-    # Start adversarial server (running on port 8002)
     adversarial_proc = subprocess.Popen(
-        [".venv/bin/python", "mock_servers/adversarial_server.py"],
-        stdout=None,
-        stderr=None
+        [sys.executable, "mock_servers/adversarial_server.py"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
     )
     
     # Wait for all ports to bind successfully
@@ -43,9 +41,14 @@ def run_servers():
         time.sleep(0.1)
     
     if not bound:
-        gateway_proc.terminate()
-        trusted_proc.terminate()
-        adversarial_proc.terminate()
+        for name, proc in [("gateway", gateway_proc), ("trusted", trusted_proc), ("adversarial", adversarial_proc)]:
+            proc.terminate()
+            try:
+                _, err = proc.communicate(timeout=2.0)
+                if err:
+                    print(f"\n[{name} stderr]: {err.decode()[:500]}")
+            except Exception:
+                pass
         raise RuntimeError("Failed to bind mock servers and gateway to ports 8000, 8001, 8002 within timeout")
         
     yield

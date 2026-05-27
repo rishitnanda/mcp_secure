@@ -23,21 +23,19 @@ def temp_db_path():
 async def test_db_happy_path(temp_db_path):
     db_mgr = DatabaseManager(temp_db_path)
     await db_mgr.init_db()
+    try:
+        task1 = db_mgr.log_event("req-1", "tools/call", '{"code": "1+1"}', "SUCCESS", 12.5, 0, "sandbox-server")
+        task2 = db_mgr.log_event("req-2", "tools/call", '{"code": "rm -rf"}', "BLOCKED", 1.2, None, "sandbox-server")
+        task3 = db_mgr.log_event("req-3", "tools/call", '{"code": "import time"}', "TIMEOUT", 2000.0, -9, "sandbox-server")
+        await asyncio.gather(task1, task2, task3)
 
-    # Log events
-    task1 = db_mgr.log_event("req-1", "tools/call", '{"code": "1+1"}', "SUCCESS", 12.5, 0, "sandbox-server")
-    task2 = db_mgr.log_event("req-2", "tools/call", '{"code": "rm -rf"}', "BLOCKED", 1.2, None, "sandbox-server")
-    task3 = db_mgr.log_event("req-3", "tools/call", '{"code": "import time"}', "TIMEOUT", 2000.0, -9, "sandbox-server")
-
-    # Await database write completion
-    await asyncio.gather(task1, task2, task3)
-
-    # Check metrics
-    metrics = await db_mgr.get_metrics()
-    assert metrics["SUCCESS"] == 1
-    assert metrics["BLOCKED"] == 1
-    assert metrics["TIMEOUT"] == 1
-    assert metrics["SANITIZED"] == 0
+        metrics = await db_mgr.get_metrics()
+        assert metrics["SUCCESS"] == 1
+        assert metrics["BLOCKED"] == 1
+        assert metrics["TIMEOUT"] == 1
+        assert metrics["SANITIZED"] == 0
+    finally:
+        await db_mgr.close()
 
 @pytest.mark.asyncio
 async def test_db_unavailable_fails_gracefully():
@@ -62,11 +60,8 @@ async def test_db_unavailable_fails_gracefully():
 async def test_db_concurrent_stress_test(temp_db_path):
     db_mgr = DatabaseManager(temp_db_path)
     await db_mgr.init_db()
-
-    num_writes = 100
-    tasks = []
-    for i in range(num_writes):
-        tasks.append(
+    try:
+        tasks = [
             db_mgr.log_event(
                 f"req-stress-{i}",
                 "tools/call",
@@ -74,13 +69,15 @@ async def test_db_concurrent_stress_test(temp_db_path):
                 "SUCCESS" if i % 2 == 0 else "SANITIZED",
                 15.0,
                 0,
-                "stress-server"
+                "stress-server",
             )
-        )
+            for i in range(100)
+        ]
+        await asyncio.gather(*tasks)
 
-    await asyncio.gather(*tasks)
-
-    metrics = await db_mgr.get_metrics()
-    assert metrics["SUCCESS"] == 50
-    assert metrics["SANITIZED"] == 50
+        metrics = await db_mgr.get_metrics()
+        assert metrics["SUCCESS"] == 50
+        assert metrics["SANITIZED"] == 50
+    finally:
+        await db_mgr.close()
 

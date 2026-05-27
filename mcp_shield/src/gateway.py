@@ -188,16 +188,16 @@ async def handle_mcp_request(request: Request):
         error_frame = to_jsonrpc_error(exc, request_id=request_id)
         return JSONResponse(content=error_frame, status_code=200)
 
-    # 4. Routing Handoff — only the standard tools/call path is valid for execute_code (Problem 7).
-    # The bare method=="execute_code" path was non-standard dead code and is removed.
+    # 4. Routing Handoff: detect execute_code via both standard MCP path (tools/call with
+    # name="execute_code") and the direct method path used by demo.sh and E1/E2 tests.
     is_execute_code = (
-        rpc_request.method == "tools/call"
-        and isinstance(rpc_request.params, dict)
-        and rpc_request.params.get("name") == "execute_code"
+        rpc_request.method == "execute_code"
+        or (
+            rpc_request.method == "tools/call"
+            and isinstance(rpc_request.params, dict)
+            and rpc_request.params.get("name") == "execute_code"
+        )
     )
-    # Also allow direct method=="execute_code" for backwards compat with tests
-    if rpc_request.method == "execute_code":
-        is_execute_code = True
 
     if is_execute_code:
         # Extract code parameter
@@ -441,10 +441,11 @@ async def run_tests():
 
 @app.post("/api/replay-direct")
 async def replay_direct(request: Request):
-    # NOTE: The shield replay here also goes through forward_request (external HTTP).
-    # While this is technically a self-loop (Problem 8), it is necessary for this endpoint
-    # since it must go through the full gateway middleware pipeline to log the event.
-    # This is an accepted trade-off for the demo replay use case.
+    # NOTE: The shield replay is an intentional self-loop — it re-enters the gateway via HTTP
+    # so the replayed request passes through the full policy pipeline (HMAC → attestation →
+    # regex → AST → namespace) and gets logged to telemetry. Calling policy_engine.evaluate()
+    # directly here would skip the logging and sanitization steps that make the replay useful
+    # for the dashboard's side-by-side comparison view.
     try:
         body = await request.json()
         payload = body.get("payload")
