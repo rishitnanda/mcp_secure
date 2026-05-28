@@ -5,3 +5,4 @@
 - **First-contact TOFU attacks** — on first connection from a server that has never presented ATTESTMCP credentials, the suite operates in permissive mode. Key pinning is not yet implemented.
 - **Legitimately certified malicious servers** — attestation proves identity, not behaviour. A server with a valid certificate serving malicious content passes the attestation check.
 - **Transport-layer attacks** (MiTM, DNS rebinding) — require TLS termination and certificate pinning at the transport layer, which is outside the current scope.
+- **Host /tmp bind mount** — The Docker Compose setup binds the host's `/tmp` into the shield container so sandbox workspace directories are visible to the Docker daemon when spinning up child containers. This is a Docker-out-of-Docker constraint, not a design choice. Production deployments should run the sandbox manager on the host directly rather than inside a container.

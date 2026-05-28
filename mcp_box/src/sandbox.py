@@ -49,9 +49,6 @@ class DockerSandbox:
         """Creates a uuid4 named directory in /tmp and sets permissions to 0o777."""
         temp_dir = os.path.join("/tmp", f"mcp_sandbox_{uuid.uuid4()}")
         os.makedirs(temp_dir, exist_ok=True)
-        # 0o777 required: container runs as sandboxuser (uid 1000),
-        # which has no special privileges on the host filesystem.
-        # The mount is ephemeral and deleted in the finally block.
         os.chmod(temp_dir, 0o777)
         logger.info(f"Created temp workspace at {temp_dir}")
         return temp_dir

@@ -9,12 +9,13 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - .:/workspace
-      - sandbox_tmp:/sandbox_tmp
+      - /tmp:/tmp
     environment:
       - TRUSTED_SERVER_URL=http://mock-trusted-server:8001/mcp
       - ADVERSARIAL_SERVER_URL=http://mock-adversarial-server:8002/mcp
       - MCP_KEY_FILESYSTEM=secret-filesystem-key
       - MCP_KEY_TRUSTED=secret-trusted-key
+      - MCP_SANDBOX_TMP=/sandbox_tmp
     depends_on:
       - mock-trusted-server
       - mock-adversarial-server
@@ -40,5 +41,3 @@ services:
       - .:/workspace
     environment:
       - SHIELD_URL=http://mcp-shield:8000/mcp
-volumes:
-  sandbox_tmp:
