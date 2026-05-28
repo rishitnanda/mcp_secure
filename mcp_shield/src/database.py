@@ -12,15 +12,9 @@ class DatabaseManager:
         self._initialized = False
 
     async def init_db(self):
-        """Initializes a persistent aiosqlite connection and sets up the schema.
-        
-        A single connection is held for the lifetime of the process instead of
-        opening a new connection per write. This eliminates 100-conn open/close
-        cycles under concurrent load (Problem 2).
-        """
+        """Initializes a persistent aiosqlite connection and sets up the schema."""
         try:
             self._db = await aiosqlite.connect(self.db_path)
-            # WAL allows concurrent reads and writes without lock exception crashes
             await self._db.execute("PRAGMA journal_mode=WAL;")
             # NORMAL reduces sync cycles without compromising write durability in WAL mode
             await self._db.execute("PRAGMA synchronous=NORMAL;")
