@@ -1,12 +1,13 @@
 import asyncio
+import os
 import time
 import sys
 import aiosqlite
 from typing import Dict, Any, Optional
 
 class DatabaseManager:
-    def __init__(self, db_path: str = "telemetry.db"):
-        self.db_path = db_path
+    def __init__(self, db_path: str = None):
+        self.db_path = db_path or os.getenv("MCP_SHIELD_DB_PATH", "telemetry.db")
         self._db: Optional[aiosqlite.Connection] = None
         self._initialized = False
 

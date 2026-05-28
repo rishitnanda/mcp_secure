@@ -2,22 +2,50 @@ import subprocess
 import sys
 import time
 import socket
+import os
+import tempfile
 import pytest
 import urllib.request
 import json
 import sqlite3
 import uuid
 
+# Module-level DB path used by both the fixture and query_db_with_retry.
+# Overwritten per test session to point at a clean, writable temp file.
+_test_db_path: str = "telemetry.db"
+
 def is_port_open(port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(('127.0.0.1', port)) == 0
 
 @pytest.fixture(scope="module", autouse=True)
-def run_servers():
+def run_servers(tmp_path_factory):
+    global _test_db_path
+
+    # --- Stale DB cleanup ---
+    for suffix in ("", "-wal", "-shm"):
+        stale = os.path.join(os.getcwd(), f"telemetry.db{suffix}")
+        try:
+            os.remove(stale)
+        except FileNotFoundError:
+            pass
+        except PermissionError:
+            # Root-owned file from Docker — force-remove
+            subprocess.run(["sudo", "rm", "-f", stale], check=False)
+
+    # Use a temp directory so the test DB can never collide with Docker's DB
+    db_dir = tmp_path_factory.mktemp("e2e_db")
+    db_file = str(db_dir / "telemetry.db")
+    _test_db_path = db_file
+
+    env = os.environ.copy()
+    env["MCP_SHIELD_DB_PATH"] = db_file
+
     gateway_proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "mcp_shield.src.gateway:app", "--host", "127.0.0.1", "--port", "8000"],
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
+        stderr=subprocess.PIPE,
+        env=env
     )
     trusted_proc = subprocess.Popen(
         [sys.executable, "mock_servers/trusted_server.py"],
@@ -30,16 +58,28 @@ def run_servers():
         stderr=subprocess.PIPE
     )
     
+    procs = [("gateway", gateway_proc), ("trusted", trusted_proc), ("adversarial", adversarial_proc)]
+
     # Wait for all ports to bind successfully
     bound = False
     for _ in range(50):
         if is_port_open(8000) and is_port_open(8001) and is_port_open(8002):
             bound = True
             break
+        # Bail early if any process already exited (crashed)
+        for name, proc in procs:
+            if proc.poll() is not None:
+                _, err = proc.communicate(timeout=2.0)
+                for n, p in procs:
+                    if p.poll() is None:
+                        p.terminate()
+                raise RuntimeError(
+                    f"{name} exited early (rc={proc.returncode}): {err.decode()[:500] if err else 'no stderr'}"
+                )
         time.sleep(0.1)
     
     if not bound:
-        for name, proc in [("gateway", gateway_proc), ("trusted", trusted_proc), ("adversarial", adversarial_proc)]:
+        for name, proc in procs:
             proc.terminate()
             try:
                 _, err = proc.communicate(timeout=2.0)
@@ -52,18 +92,13 @@ def run_servers():
     yield
     
     # Clean up background server processes
-    gateway_proc.terminate()
-    trusted_proc.terminate()
-    adversarial_proc.terminate()
-    
-    try:
-        gateway_proc.wait(timeout=1.0)
-        trusted_proc.wait(timeout=1.0)
-        adversarial_proc.wait(timeout=1.0)
-    except subprocess.TimeoutExpired:
-        gateway_proc.kill()
-        trusted_proc.kill()
-        adversarial_proc.kill()
+    for _, proc in procs:
+        proc.terminate()
+    for _, proc in procs:
+        try:
+            proc.wait(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            proc.kill()
 
 def send_rpc(payload: dict, headers: dict = None) -> dict:
     headers_to_send = {"Content-Type": "application/json"}
@@ -88,7 +123,7 @@ def query_db_with_retry(query, params, expected_status, max_retries=15, delay=0.
     exceptions mid-loop.
     """
     for _ in range(max_retries):
-        conn = sqlite3.connect("telemetry.db")
+        conn = sqlite3.connect(_test_db_path)
         try:
             cursor = conn.cursor()
             cursor.execute(query, params)
