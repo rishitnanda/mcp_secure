@@ -16,10 +16,14 @@
 To mitigate sophisticated indirect prompt injection frameworks like AIShellJack:
 
 1. **Build a Custom, Pure-Python Prompt Injection Guardrail:** Avoid heavy external dependencies (like Llama-Guard) by implementing a multi-tiered heuristic scoring engine directly in Python. This engine will analyze texts dynamically using:
-    - *Imperative Constraint Override Detection:* Scanning for semantic combinations of override/bypass verbs (e.g., `ignore`, `bypass`, `forget`) coupled with target objects (e.g., `instructions`, `rules`, `system`).
-    - *Roleplay and Persona Hijacking Scans:* Identifying attempts to establish alternative identities (e.g., `you are now`, `act as`, `DAN`).
-    - *System Prompt Leaking Detection:* Flagging phrases asking the AI client to output or repeat previous instructions (e.g., `output the above`, `repeat from the beginning`).
-    - *Entropy and Obfuscation Filters:* Inspecting payloads for zero-width spaces, excessive Unicode anomalies, or base64 patterns commonly used to hide injection payloads from tokenizers.
+
+    * *Imperative Constraint Override Detection:* Scanning for semantic combinations of override/bypass verbs (e.g., `ignore`, `bypass`, `forget`) coupled with target objects (e.g., `instructions`, `rules`, `system`).
+    * *Roleplay and Persona Hijacking Scans:* Identifying attempts to establish alternative identities (e.g., `you are now`, `act as`, `DAN`).
+    * *System Prompt Leaking Detection:* Flagging phrases asking the AI client to output or repeat previous instructions (e.g., `output the above`, `repeat from the beginning`).
+    * *Entropy and Obfuscation Filters:* Inspecting payloads for zero-width spaces, excessive Unicode anomalies, or base64 patterns commonly used to hide injection payloads from tokenizers.
+
 2. **Implement Command / Shell AST Parsers:** Expand AST scanning beyond Python. Implement a bash/shell command parser (e.g., using `bashlex`) to analyze arguments passed to shell execution tools, blocking dangerous redirectors (`>`), pipe constructs (`|`), or subshells (`$()`) regardless of the parameter names used.
+
 3. **Stricter Filesystem and Workspace Sandboxing:** Control what files the client agent is allowed to read. Prevent the client from reading config or workspace rule files (like `.cursorrules`) unless explicitly trusted/signed, or execute filesystem operations inside a restricted chroot or container namespace.
+
 4. **Dynamic Context Filtering:** Use semantic scanning or entropy-based filters to identify highly irregular or hidden instructions embedded within standard markdown/text outputs.
