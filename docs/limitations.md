@@ -14,6 +14,7 @@
 ## Recommendations to Increase Rigor
 
 To mitigate sophisticated indirect prompt injection frameworks like AIShellJack:
+
 1. **Build a Custom, Pure-Python Prompt Injection Guardrail:** Avoid heavy external dependencies (like Llama-Guard) by implementing a multi-tiered heuristic scoring engine directly in Python. This engine will analyze texts dynamically using:
     - *Imperative Constraint Override Detection:* Scanning for semantic combinations of override/bypass verbs (e.g., `ignore`, `bypass`, `forget`) coupled with target objects (e.g., `instructions`, `rules`, `system`).
     - *Roleplay and Persona Hijacking Scans:* Identifying attempts to establish alternative identities (e.g., `you are now`, `act as`, `DAN`).
