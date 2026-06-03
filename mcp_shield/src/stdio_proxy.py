@@ -8,7 +8,8 @@ from typing import List, Optional
 from pydantic import ValidationError
 
 from mcp_shield.src.schemas import JSONRPCRequest, MCPSecHeader
-from mcp_shield.src.policy import PolicyEngine, ConnectionState
+from mcp_shield.src.policy import PolicyEngine
+from mcp_shield.src.session import SessionStore, SessionState
 from mcp_shield.src.database import DatabaseManager
 from mcp_shield.src.exceptions import (
     MCPShieldException,
@@ -16,6 +17,7 @@ from mcp_shield.src.exceptions import (
     ASTValidationException,
     NamespaceViolationException,
     CapabilityViolationException,
+    SequenceViolationException,
     to_jsonrpc_error
 )
 
@@ -47,7 +49,7 @@ async def get_sys_stdin_reader() -> asyncio.StreamReader:
 async def client_to_server_loop(
     client_reader: asyncio.StreamReader,
     server_writer: asyncio.StreamWriter,
-    conn_state: ConnectionState
+    session_state: SessionState
 ):
     """Reads JSON-RPC requests from client stdin, evaluates policies, and forwards allowed traffic."""
     while True:
@@ -74,7 +76,7 @@ async def client_to_server_loop(
 
                 # 3. PolicyEngine evaluation
                 start_time = time.time()
-                policy_res = engine.evaluate(request, conn_state)
+                policy_res = engine.evaluate(request, session_state)
                 duration_ms = (time.time() - start_time) * 1000.0
 
                 if not policy_res.allowed:
@@ -86,7 +88,7 @@ async def client_to_server_loop(
                         status="BLOCKED",
                         duration_ms=duration_ms,
                         exit_code=None,
-                        server_id=conn_state.server_id or "unknown"
+                        server_id=session_state.server_id or "unknown"
                     )
 
                     # Instantiate concrete Exception corresponding to stage
@@ -97,10 +99,12 @@ async def client_to_server_loop(
                     elif policy_res.stage == "namespace":
                         exc = NamespaceViolationException(
                             request.params.get("name", "unknown") if isinstance(request.params, dict) else "unknown",
-                            conn_state.server_id or "unknown"
+                            session_state.server_id or "unknown"
                         )
                     elif policy_res.stage == "attestation":
-                        exc = CapabilityViolationException(request.method, conn_state.server_id or "unknown")
+                        exc = CapabilityViolationException(request.method, session_state.server_id or "unknown")
+                    elif policy_res.stage == "sequence":
+                        exc = SequenceViolationException(policy_res.reason, session_state.server_id or "unknown")
                     else:
                         exc = MCPShieldException(policy_res.reason, policy_res.stage)
 
@@ -136,7 +140,7 @@ async def client_to_server_loop(
 
 async def server_to_client_loop(
     server_reader: asyncio.StreamReader,
-    conn_state: ConnectionState
+    session_state: SessionState
 ):
     """Reads JSON-RPC responses from server stdout, applies sanitizers/attestations, and writes to client stdout."""
     while True:
@@ -165,7 +169,7 @@ async def server_to_client_loop(
                     cert_json = result.get("capability_cert")
                     success, reason = engine.verify_capability_cert(cert_json)
                     if not success:
-                        exc = CapabilityViolationException("attestation", conn_state.server_id or "unknown")
+                        exc = CapabilityViolationException("attestation", session_state.server_id or "unknown")
                         error_frame = to_jsonrpc_error(exc, request_id=request_id)
                         write_response(error_frame)
 
@@ -176,19 +180,19 @@ async def server_to_client_loop(
                             status="BLOCKED",
                             duration_ms=0.0,
                             exit_code=None,
-                            server_id=conn_state.server_id or "unknown"
+                            server_id=session_state.server_id or "unknown"
                         )
                         # Drop session on invalid certificate attestation.
                         # Use SystemExit instead of os._exit to allow async tasks
                         # (including pending log writes) to flush cleanly (Problem 16).
                         raise SystemExit(1)
                     else:
-                        conn_state.verified_capabilities = cert_json.get("capabilities", [])
-                        conn_state.cert_expiry = cert_json.get("expires_at")
+                        session_state.verified_capabilities = cert_json.get("capabilities", [])
+                        session_state.cert_expiry = cert_json.get("expires_at")
 
                 # Intercept tools/list responses to apply namespace locking filter
                 if isinstance(result, dict) and "tools" in result:
-                    raw_dict = engine.filter_tools_list_response(conn_state.server_id or "unknown", raw_dict)
+                    raw_dict = engine.filter_tools_list_response(session_state.server_id or "unknown", raw_dict)
 
                 # Intercept tools/call responses to apply output sanitization rules
                 if isinstance(result, dict) and "content" in result:
@@ -210,7 +214,7 @@ async def server_to_client_loop(
                                 status="SANITIZED",
                                 duration_ms=0.0,
                                 exit_code=0,
-                                server_id=conn_state.server_id or "unknown"
+                                server_id=session_state.server_id or "unknown"
                             )
 
                 write_response(raw_dict)
@@ -235,11 +239,17 @@ async def async_main():
 
     # Guess server ID to load configuration rules
     server_id = guess_server_id(server_cmd)
-    conn_state = ConnectionState(server_id=server_id)
 
     # Initialize Telemetry database
     await db_manager.init_db()
     engine.load_config()
+    
+    session_store = SessionStore()
+    session_policy = engine.config.get("session_policy", {})
+    session_store.timeout_seconds = session_policy.get("session_timeout_seconds", 1800)
+    session_store.max_calls_per_session = session_policy.get("max_calls_per_session", 100)
+    
+    session_state = session_store.get_or_create(server_id)
 
     # Spawn target subprocess server
     try:
@@ -257,10 +267,10 @@ async def async_main():
 
     # Spin up concurrent StreamReader forwarding loops
     client_task = asyncio.create_task(
-        client_to_server_loop(client_reader, server_proc.stdin, conn_state)
+        client_to_server_loop(client_reader, server_proc.stdin, session_state)
     )
     server_task = asyncio.create_task(
-        server_to_client_loop(server_proc.stdout, conn_state)
+        server_to_client_loop(server_proc.stdout, session_state)
     )
 
     await asyncio.gather(client_task, server_task)

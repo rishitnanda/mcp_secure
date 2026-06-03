@@ -91,7 +91,7 @@ class MCPSecHeader(BaseModel):
         return v
 
 # List of stages in the proxy interception pipeline
-VALID_STAGES = {"regex", "ast", "namespace", "attestation", "hmac", "sanitizer", "passed"}
+VALID_STAGES = {"regex", "ast", "namespace", "attestation", "hmac", "sanitizer", "sequence", "passed"}
 
 class PolicyResult(BaseModel):
     allowed: bool

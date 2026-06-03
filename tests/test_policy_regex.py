@@ -1,5 +1,6 @@
 import pytest
-from mcp_shield.src.policy import PolicyEngine, ConnectionState
+from mcp_shield.src.policy import PolicyEngine
+from mcp_shield.src.session import SessionState
 from mcp_shield.src.schemas import JSONRPCRequest
 
 @pytest.fixture
@@ -8,7 +9,7 @@ def policy_engine():
     return PolicyEngine()
 
 def test_regex_clean_input_passes(policy_engine):
-    conn = ConnectionState(server_id="filesystem-server")
+    conn = SessionState(server_id="filesystem-server")
     req = JSONRPCRequest(
         jsonrpc="2.0",
         id=1,
@@ -23,7 +24,7 @@ def test_regex_clean_input_passes(policy_engine):
     assert result.stage == "passed"
 
 def test_regex_rm_rf_blocked(policy_engine):
-    conn = ConnectionState(server_id="filesystem-server")
+    conn = SessionState(server_id="filesystem-server")
     req = JSONRPCRequest(
         jsonrpc="2.0",
         id=1,
@@ -39,7 +40,7 @@ def test_regex_rm_rf_blocked(policy_engine):
     assert "rm\\s+-rf" in result.reason
 
 def test_regex_chmod_blocked(policy_engine):
-    conn = ConnectionState(server_id="filesystem-server")
+    conn = SessionState(server_id="filesystem-server")
     req = JSONRPCRequest(
         jsonrpc="2.0",
         id=1,
@@ -56,7 +57,7 @@ def test_regex_chmod_blocked(policy_engine):
 
 def test_regex_etc_passwd_blocked(policy_engine):
     # Falls back to default blacklist for untrusted server (or default regex rules)
-    conn = ConnectionState(server_id="untrusted-server")
+    conn = SessionState(server_id="untrusted-server")
     conn.verified_capabilities = ["tools"]
     req = JSONRPCRequest(
         jsonrpc="2.0",
@@ -73,7 +74,7 @@ def test_regex_etc_passwd_blocked(policy_engine):
     assert "/etc/passwd" in result.reason
 
 def test_regex_nc_e_blocked(policy_engine):
-    conn = ConnectionState(server_id="untrusted-server")
+    conn = SessionState(server_id="untrusted-server")
     conn.verified_capabilities = ["tools"]
     req = JSONRPCRequest(
         jsonrpc="2.0",
@@ -90,7 +91,7 @@ def test_regex_nc_e_blocked(policy_engine):
     assert "nc\\s+-e" in result.reason
 
 def test_regex_curl_bash_blocked(policy_engine):
-    conn = ConnectionState(server_id="untrusted-server")
+    conn = SessionState(server_id="untrusted-server")
     conn.verified_capabilities = ["tools"]
     req = JSONRPCRequest(
         jsonrpc="2.0",
@@ -107,7 +108,7 @@ def test_regex_curl_bash_blocked(policy_engine):
     assert "curl.*bash" in result.reason
 
 def test_regex_wget_sh_blocked(policy_engine):
-    conn = ConnectionState(server_id="untrusted-server")
+    conn = SessionState(server_id="untrusted-server")
     conn.verified_capabilities = ["tools"]
     req = JSONRPCRequest(
         jsonrpc="2.0",
@@ -124,7 +125,7 @@ def test_regex_wget_sh_blocked(policy_engine):
     assert "wget.*sh" in result.reason
 
 def test_regex_base64_blocked(policy_engine):
-    conn = ConnectionState(server_id="untrusted-server")
+    conn = SessionState(server_id="untrusted-server")
     conn.verified_capabilities = ["tools"]
     req = JSONRPCRequest(
         jsonrpc="2.0",

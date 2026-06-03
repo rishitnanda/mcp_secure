@@ -1,5 +1,6 @@
 import pytest
-from mcp_shield.src.policy import PolicyEngine, ConnectionState
+from mcp_shield.src.policy import PolicyEngine
+from mcp_shield.src.session import SessionState
 from mcp_shield.src.schemas import JSONRPCRequest
 
 @pytest.fixture
@@ -8,7 +9,7 @@ def policy_engine():
 
 # Namespace Lock Tests
 def test_namespace_lock_allowed_tool_passes(policy_engine):
-    conn = ConnectionState(server_id="filesystem-server")
+    conn = SessionState(server_id="filesystem-server")
     req = JSONRPCRequest(
         jsonrpc="2.0",
         id=1,
@@ -22,7 +23,7 @@ def test_namespace_lock_allowed_tool_passes(policy_engine):
     assert result.allowed is True
 
 def test_namespace_lock_unauthorized_tool_blocked(policy_engine):
-    conn = ConnectionState(server_id="filesystem-server")
+    conn = SessionState(server_id="filesystem-server")
     req = JSONRPCRequest(
         jsonrpc="2.0",
         id=1,

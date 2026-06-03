@@ -56,5 +56,38 @@
   "server_keys": {
     "filesystem-server": "${MCP_KEY_FILESYSTEM}",
     "trusted-server": "${MCP_KEY_TRUSTED}"
+  },
+  "session_policy": {
+    "session_timeout_seconds": 1800,
+    "max_calls_per_session": 100
+  },
+  "sequence_policy": {
+    "default": [
+      {
+        "name": "sampling_after_resource_read",
+        "description": "Server reads resources then attempts sampling — classic exfiltration pattern",
+        "pattern": ["resources/read", "resources/read", "sampling/createMessage"],
+        "window": 3,
+        "action": "block"
+      },
+      {
+        "name": "rapid_tool_escalation",
+        "description": "More than 5 distinct tool calls within a single session before any response",
+        "max_calls": 5,
+        "window_seconds": 60,
+        "action": "block"
+      }
+    ],
+    "servers": {
+      "filesystem-server": [
+        {
+          "name": "write_after_read_sensitive",
+          "description": "Read followed by write on filesystem server — potential data staging",
+          "pattern": ["tools/call:read_file", "tools/call:write_file"],
+          "window": 2,
+          "action": "block"
+        }
+      ]
+    }
   }
 }

@@ -27,15 +27,8 @@ from mcp_shield.src.exceptions import (
     NamespaceViolationException,
     CapabilityViolationException,
 )
+from mcp_shield.src.session import SessionState
 
-class ConnectionState:
-    """Tracks connection-specific capability attestation state."""
-    def __init__(self, server_id: Optional[str] = None):
-        self.server_id = server_id
-        # We start with empty capabilities, which will be populated
-        # upon successful validation of the CapabilityCert.
-        self.verified_capabilities: List[str] = []
-        self.cert_expiry: Optional[float] = None
 
 
 class NonceWindow:
@@ -141,20 +134,29 @@ class PolicyEngine:
     def evaluate(
         self,
         request: JSONRPCRequest,
-        conn_state: ConnectionState,
+        session_state: SessionState,
         body_bytes: Optional[bytes] = None,
         sec_header: Optional[MCPSecHeader] = None
     ) -> PolicyResult:
-        """Evaluates a JSON-RPC request through the sequential 5-stage policy chain.
+        """Evaluates a JSON-RPC request through the sequential 6-stage policy chain."""
+        policy_res = self._evaluate_impl(request, session_state, body_bytes, sec_header)
         
-        Order of evaluation:
-          1. HMAC check (SSE mode only — skipped in stdio mode)
-          2. Capability attestation check
-          3. Regex scan
-          4. AST scan (only if a code parameter is present)
-          5. Namespace lock (verifies that tool name in tools/call matches allowed tools)
-        """
-        server_id = conn_state.server_id or (sec_header.server_id if sec_header else "unknown")
+        # Record call outcome in session history
+        tool_name = request.params.get("name") if isinstance(request.params, dict) else None
+        outcome = policy_res.stage if not policy_res.allowed else "allowed"
+        session_state.record_call(request.method, tool_name, outcome)
+        
+        return policy_res
+
+    def _evaluate_impl(
+        self,
+        request: JSONRPCRequest,
+        session_state: SessionState,
+        body_bytes: Optional[bytes] = None,
+        sec_header: Optional[MCPSecHeader] = None
+    ) -> PolicyResult:
+        """Internal evaluation logic, wrapped to ensure call history is always recorded."""
+        server_id = session_state.server_id or (sec_header.server_id if sec_header else "unknown")
 
         # 1. HMAC validation (only in HTTP/SSE transport modes where sec_header is provided)
         if sec_header is not None and body_bytes is not None:
@@ -185,6 +187,11 @@ class PolicyEngine:
                     stage="hmac"
                 )
 
+        # 1.5 Sequence Check
+        seq_res = self._check_sequence(request, session_state)
+        if seq_res:
+            return seq_res
+
         # 2. Capability Attestation check
         # Map requested JSON-RPC methods to required capabilities.
         req_capability = None
@@ -209,15 +216,15 @@ class PolicyEngine:
 
             if req_capability == "sampling":
                 is_allowed = (
-                    "sampling" in conn_state.verified_capabilities
+                    "sampling" in session_state.verified_capabilities
                     or server_cfg.get("sampling_allowed", False)
                 )
             else:
                 if trust_mode == "strict":
-                    is_allowed = req_capability in conn_state.verified_capabilities
+                    is_allowed = req_capability in session_state.verified_capabilities
                 else:
                     is_allowed = (
-                        req_capability in conn_state.verified_capabilities
+                        req_capability in session_state.verified_capabilities
                         or server_id in self.config.get("servers", {})
                     )
 
@@ -361,6 +368,56 @@ class PolicyEngine:
 
         return PolicyResult(allowed=True, reason="Passed all security policies", stage="passed")
 
+    def _check_sequence(self, request: JSONRPCRequest, session_state: SessionState) -> Optional[PolicyResult]:
+        """Evaluates the current request against configured sequence patterns and rate limits."""
+        seq_policy = self.config.get("sequence_policy", {})
+        if not seq_policy:
+            return None
+            
+        now = time.time()
+        rules = seq_policy.get("default", [])
+        server_rules = seq_policy.get("servers", {}).get(session_state.server_id, [])
+        all_rules = server_rules + rules
+        
+        history = session_state.call_history
+        current_method = request.method
+        current_tool = request.params.get("name") if isinstance(request.params, dict) else None
+        current_sig = f"tools/call:{current_tool}" if current_method == "tools/call" and current_tool else current_method
+        
+        for rule in all_rules:
+            action = rule.get("action", "block")
+            if action != "block":
+                continue
+                
+            # Rate limit rule
+            if "max_calls" in rule and "window_seconds" in rule:
+                max_calls = rule["max_calls"]
+                window_seconds = rule["window_seconds"]
+                recent_calls = [c for c in history if now - c["timestamp"] <= window_seconds]
+                if len(recent_calls) >= max_calls:
+                    return PolicyResult(allowed=False, reason=rule.get("name", "rate_limit_exceeded"), stage="sequence")
+                    
+            # Pattern rule
+            if "pattern" in rule:
+                pattern = rule["pattern"]
+                window_size = rule.get("window", len(pattern))
+                
+                recent_history = history[-(window_size - 1):] if window_size > 1 else []
+                recent_sigs = []
+                for call in recent_history:
+                    method = call["method"]
+                    tool = call.get("tool_name")
+                    sig = f"tools/call:{tool}" if method == "tools/call" and tool else method
+                    recent_sigs.append(sig)
+                recent_sigs.append(current_sig)
+                
+                # Check for contiguous sublist matching the pattern
+                n = len(pattern)
+                if any(pattern == recent_sigs[i:i+n] for i in range(len(recent_sigs)-n+1)):
+                    return PolicyResult(allowed=False, reason=rule.get("name", "suspicious_sequence"), stage="sequence")
+                    
+        return None
+
     def verify_capability_cert(self, cert_json: dict) -> Tuple[bool, str]:
         """Loads and verifies a cryptographic capability certificate using the Root CA certificate."""
         ca_cert_path = os.environ.get("MCP_CA_CERT", "config/ca_cert.pem")
@@ -436,12 +493,6 @@ class PolicyEngine:
         server_cfg = self.config.get("servers", {}).get(server_id, {})
         allowed_tools = server_cfg.get("allowed_tools", self.config.get("default", {}).get("allowed_tools", []))
 
-        # If allowed_tools is empty or not configured, allow all by default or block?
-        # Typically if allowed_tools is configured we restrict, if it is not configured, we might allow all
-        # unless configured to strict.
-        # Let's check config schema: "filesystem-server" has allowed_tools listed.
-        # If server_id matches but has no allowed tools, or if allowed_tools is an empty list, no tools are allowed.
-        # Let's do a strict filter:
         # If server is declared in config, it MUST only return tools in allowed_tools.
         if server_id in self.config.get("servers", {}):
             result = response_dict.get("result", {})

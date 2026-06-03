@@ -2,7 +2,8 @@ import time
 import hmac
 import hashlib
 import pytest
-from mcp_shield.src.policy import PolicyEngine, ConnectionState
+from mcp_shield.src.policy import PolicyEngine
+from mcp_shield.src.session import SessionState
 from mcp_shield.src.schemas import JSONRPCRequest, MCPSecHeader
 
 @pytest.fixture
@@ -12,7 +13,7 @@ def hmac_policy_engine(monkeypatch):
     return engine
 
 def test_hmac_valid_passes(hmac_policy_engine):
-    conn = ConnectionState(server_id="filesystem-server")
+    conn = SessionState(server_id="filesystem-server")
     req = JSONRPCRequest(
         jsonrpc="2.0",
         id=1,
@@ -38,7 +39,7 @@ def test_hmac_valid_passes(hmac_policy_engine):
     assert result.allowed is True
 
 def test_hmac_invalid_signature_blocked(hmac_policy_engine):
-    conn = ConnectionState(server_id="filesystem-server")
+    conn = SessionState(server_id="filesystem-server")
     req = JSONRPCRequest(
         jsonrpc="2.0",
         id=1,
@@ -64,7 +65,7 @@ def test_hmac_invalid_signature_blocked(hmac_policy_engine):
     assert "signature mismatch" in result.reason
 
 def test_hmac_replay_blocked(hmac_policy_engine):
-    conn = ConnectionState(server_id="filesystem-server")
+    conn = SessionState(server_id="filesystem-server")
     req = JSONRPCRequest(
         jsonrpc="2.0",
         id=1,
@@ -97,7 +98,7 @@ def test_hmac_replay_blocked(hmac_policy_engine):
     assert "nonce replay" in result2.reason
 
 def test_hmac_outdated_timestamp_blocked(hmac_policy_engine):
-    conn = ConnectionState(server_id="filesystem-server")
+    conn = SessionState(server_id="filesystem-server")
     req = JSONRPCRequest(
         jsonrpc="2.0",
         id=1,

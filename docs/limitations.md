@@ -10,6 +10,8 @@
 - **Lack of Static Configuration and Secret Auditing** — The suite does not scan workspace configs, env files, or JSON configs for exposed API keys, credentials, or insecure HTTP endpoints prior to deployment.
 - **Lack of Supply Chain / Dependency Verification** — The stdio proxy spawns server commands directly (e.g., `npx -y`) without verifying if the commands are pinned to secure, verified versions, leaving it vulnerable to dependency hijacking.
 - **Lack of Tool Schema/Description Hardening** — The proxy enforces namespace permissions strictly on tool names. It does not inspect tool schemas, arguments, or descriptions to determine if the definitions themselves are structured to prevent prompt injection or LLM manipulation.
+- **Sequence Rules Actions** — Sequence rules currently only support `block` actions. "Warning-only" telemetry modes are a future work item.
+- **Multi-Turn Session Isolation** — Multi-turn sequence detection covers ordered pattern matching and rate limiting within a single session. It does not detect cross-session attacks where a compromised server spreads a multi-step exploit across multiple reconnections, nor does it detect attacks where the malicious step occurs below the detectable window size. Session state is held in-process memory — if the gateway restarts, all session history is lost.
 
 ## Recommendations to Increase Rigor
 

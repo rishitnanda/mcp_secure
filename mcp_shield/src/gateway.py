@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from mcp_shield.src.schemas import JSONRPCRequest, MCPSecHeader, ExecutionContext, SandboxResult
-from mcp_shield.src.policy import PolicyEngine, ConnectionState
+from mcp_shield.src.policy import PolicyEngine
 from mcp_shield.src.database import DatabaseManager
 from mcp_shield.src.exceptions import (
     MCPShieldException,
@@ -20,14 +20,17 @@ from mcp_shield.src.exceptions import (
     ASTValidationException,
     NamespaceViolationException,
     CapabilityViolationException,
+    SequenceViolationException,
     to_jsonrpc_error
 )
+from mcp_shield.src.session import SessionStore
 from mcp_box.src.sandbox import DockerSandbox
 
 db_manager = DatabaseManager()
 # NOTE: PolicyEngine.__init__ calls load_config() internally.
 # The explicit load_config() call in lifespan is intentional for hot-reload semantics
 policy_engine = PolicyEngine()
+session_store = SessionStore()
 sandbox_manager: Optional[DockerSandbox] = None
 
 # Mock routing URLs mapping server_id to backend MCP server URLs
@@ -73,6 +76,10 @@ async def lifespan(app: FastAPI):
     # Intentional hot-reload call — load_config() is also called in PolicyEngine.__init__
     # but re-calling here ensures any config changes since startup are reflected.
     policy_engine.load_config()
+    session_policy = policy_engine.config.get("session_policy", {})
+    session_store.timeout_seconds = session_policy.get("session_timeout_seconds", 1800)
+    session_store.max_calls_per_session = session_policy.get("max_calls_per_session", 100)
+    
     # Run blocking DockerSandbox constructor in executor to avoid blocking event loop
     loop = asyncio.get_running_loop()
     sandbox_manager = await loop.run_in_executor(None, DockerSandbox)
@@ -135,7 +142,7 @@ async def handle_mcp_request(request: Request):
 
     # 3. Security evaluation
     server_id = request.headers.get("x-mcpsec-server-id", "default-server")
-    conn_state = ConnectionState(server_id=server_id)
+    conn_state = session_store.get_or_create(session_id=server_id)
 
     # Extract HMAC / Replay security headers if present
     timestamp_str = request.headers.get("x-mcpsec-timestamp")
@@ -181,6 +188,8 @@ async def handle_mcp_request(request: Request):
             )
         elif policy_res.stage == "attestation":
             exc = CapabilityViolationException(rpc_request.method, server_id)
+        elif policy_res.stage == "sequence":
+            exc = SequenceViolationException(policy_res.reason, server_id)
         else:
             exc = MCPShieldException(policy_res.reason, policy_res.stage)
         
@@ -411,7 +420,7 @@ async def run_tests():
         # Evaluate directly through policy engine to avoid HTTP self-loop
         try:
             rpc = JSONRPCRequest.model_validate(test["payload"])
-            conn = ConnectionState(server_id=test["server_id"])
+            conn = session_store.get_or_create(session_id=test["server_id"])
             policy_res = policy_engine.evaluate(rpc, conn)
             shield_res = {
                 "allowed": policy_res.allowed,

@@ -2,7 +2,8 @@ import time
 import pytest
 import os
 import tempfile
-from mcp_shield.src.policy import PolicyEngine, ConnectionState
+from mcp_shield.src.policy import PolicyEngine
+from mcp_shield.src.session import SessionState
 from mcp_shield.src.schemas import JSONRPCRequest, CapabilityCert
 from mcp_shield.src.exceptions import CapabilityViolationException
 
@@ -68,7 +69,7 @@ def test_attestation_wrong_server_id_fails(policy_engine, filesystem_server_cert
     assert "CN/SAN does not match" in reason or "identity does not match" in reason
 
 def test_attestation_evaluate_checks_attested_capabilities(policy_engine, filesystem_server_cert_bytes):
-    conn = ConnectionState(server_id="filesystem-server")
+    conn = SessionState(server_id="filesystem-server")
     # Verify that request is blocked before certificate attestation
     req = JSONRPCRequest(
         jsonrpc="2.0",
@@ -79,7 +80,7 @@ def test_attestation_evaluate_checks_attested_capabilities(policy_engine, filesy
     result = policy_engine.evaluate(req, conn)
     # Because filesystem-server is defined in servers config, it has allowed fallback tools.
     # But let's check a server that is NOT in servers config and has no cert:
-    conn_untrusted = ConnectionState(server_id="untrusted-server")
+    conn_untrusted = SessionState(server_id="untrusted-server")
     result_untrusted = policy_engine.evaluate(req, conn_untrusted)
     assert result_untrusted.allowed is False
     assert result_untrusted.stage == "attestation"

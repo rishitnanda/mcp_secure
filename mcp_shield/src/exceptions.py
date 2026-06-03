@@ -24,6 +24,11 @@ class CapabilityViolationException(MCPShieldException):
         super().__init__(f"Capability '{capability}' not attested for '{server_id}'", stage="attestation")
         self.capability = capability
 
+class SequenceViolationException(MCPShieldException):
+    def __init__(self, description: str, server_id: str):
+        super().__init__(f"Suspicious sequence detected: {description}", stage="sequence")
+        self.description = description
+
 class MethodNotFoundException(MCPShieldException):
     def __init__(self, method: str):
         super().__init__(f"Method not found: {method}", stage="namespace")
@@ -36,6 +41,7 @@ def to_jsonrpc_error(exc: Exception, request_id=None) -> dict:
     CODE_MAP = {
         PolicyViolationException:    (-32602, "Security policy violation: blocked pattern detected"),
         ASTValidationException:      (-32602, "Security policy violation: restricted AST token"),
+        SequenceViolationException:  (-32602, "Security policy violation: blocked sequence detected"),
         NamespaceViolationException: (-32601, "Method not found: tool not in allowed namespace"),
         CapabilityViolationException:(-32601, "Method not found: capability not attested"),
         MethodNotFoundException:     (-32601, "Method not found"),

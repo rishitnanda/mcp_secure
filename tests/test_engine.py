@@ -1,6 +1,7 @@
 import pytest
 import time
-from mcp_shield.src.policy import PolicyEngine, ConnectionState
+from mcp_shield.src.policy import PolicyEngine
+from mcp_shield.src.session import SessionState
 from mcp_shield.src.schemas import JSONRPCRequest
 
 @pytest.fixture
@@ -8,7 +9,7 @@ def policy_engine():
     return PolicyEngine()
 
 def test_engine_integration_clean_passes(policy_engine):
-    conn = ConnectionState(server_id="filesystem-server")
+    conn = SessionState(server_id="filesystem-server")
     req = JSONRPCRequest(
         jsonrpc="2.0",
         id=1,
@@ -24,7 +25,7 @@ def test_engine_integration_clean_passes(policy_engine):
 
 def test_engine_integration_regex_takes_precedence_over_ast(policy_engine):
     # If the payload violates regex and ast, regex should fire first
-    conn = ConnectionState(server_id="filesystem-server")
+    conn = SessionState(server_id="filesystem-server")
     req = JSONRPCRequest(
         jsonrpc="2.0",
         id=1,
@@ -40,7 +41,7 @@ def test_engine_integration_regex_takes_precedence_over_ast(policy_engine):
 
 def test_engine_integration_ast_before_namespace(policy_engine):
     # AST runs before namespace check
-    conn = ConnectionState(server_id="filesystem-server")
+    conn = SessionState(server_id="filesystem-server")
     req = JSONRPCRequest(
         jsonrpc="2.0",
         id=1,
