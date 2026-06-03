@@ -302,6 +302,38 @@ async def handle_mcp_request(request: Request):
                 if any_sanitized:
                     status_to_log = "SANITIZED"
 
+        # Intercept resources/read responses to apply output sanitization rules
+        if rpc_request.method == "resources/read" and isinstance(result, dict) and "contents" in result:
+            contents = result.get("contents", [])
+            if isinstance(contents, list):
+                any_sanitized = False
+                for item in contents:
+                    if isinstance(item, dict) and "text" in item:
+                        text_val = item.get("text", "")
+                        sanitized_text, flagged = policy_engine.sanitize_output(text_val)
+                        if flagged:
+                            item["text"] = sanitized_text
+                            any_sanitized = True
+                if any_sanitized:
+                    status_to_log = "SANITIZED"
+
+        # Intercept prompts/get responses to apply output sanitization rules
+        if rpc_request.method == "prompts/get" and isinstance(result, dict) and "messages" in result:
+            messages = result.get("messages", [])
+            if isinstance(messages, list):
+                any_sanitized = False
+                for msg in messages:
+                    if isinstance(msg, dict) and isinstance(msg.get("content"), dict):
+                        content_dict = msg["content"]
+                        if content_dict.get("type") == "text":
+                            text_val = content_dict.get("text", "")
+                            sanitized_text, flagged = policy_engine.sanitize_output(text_val)
+                            if flagged:
+                                content_dict["text"] = sanitized_text
+                                any_sanitized = True
+                if any_sanitized:
+                    status_to_log = "SANITIZED"
+
         # Log unified success or sanitized event
         db_manager.log_event(
             request_id=str(request_id) if request_id is not None else "unknown",

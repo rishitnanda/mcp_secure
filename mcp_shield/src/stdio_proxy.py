@@ -217,6 +217,54 @@ async def server_to_client_loop(
                                 server_id=session_state.server_id or "unknown"
                             )
 
+                # Intercept resources/read responses to apply output sanitization rules
+                if isinstance(result, dict) and "contents" in result:
+                    contents = result.get("contents", [])
+                    if isinstance(contents, list):
+                        any_sanitized = False
+                        for item in contents:
+                            if isinstance(item, dict) and "text" in item:
+                                text_val = item.get("text", "")
+                                sanitized_text, flagged = engine.sanitize_output(text_val)
+                                if flagged:
+                                    item["text"] = sanitized_text
+                                    any_sanitized = True
+                        if any_sanitized:
+                            db_manager.log_event(
+                                request_id=str(request_id) if request_id is not None else "unknown",
+                                method="resources/read",
+                                payload=raw,
+                                status="SANITIZED",
+                                duration_ms=0.0,
+                                exit_code=0,
+                                server_id=session_state.server_id or "unknown"
+                            )
+
+                # Intercept prompts/get responses to apply output sanitization rules
+                if isinstance(result, dict) and "messages" in result:
+                    messages = result.get("messages", [])
+                    if isinstance(messages, list):
+                        any_sanitized = False
+                        for msg in messages:
+                            if isinstance(msg, dict) and isinstance(msg.get("content"), dict):
+                                content_dict = msg["content"]
+                                if content_dict.get("type") == "text":
+                                    text_val = content_dict.get("text", "")
+                                    sanitized_text, flagged = engine.sanitize_output(text_val)
+                                    if flagged:
+                                        content_dict["text"] = sanitized_text
+                                        any_sanitized = True
+                        if any_sanitized:
+                            db_manager.log_event(
+                                request_id=str(request_id) if request_id is not None else "unknown",
+                                method="prompts/get",
+                                payload=raw,
+                                status="SANITIZED",
+                                duration_ms=0.0,
+                                exit_code=0,
+                                server_id=session_state.server_id or "unknown"
+                            )
+
                 write_response(raw_dict)
 
             except Exception as e:

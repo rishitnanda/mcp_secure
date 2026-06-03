@@ -17,7 +17,7 @@ sequenceDiagram
     participant Server as Target MCP Server
 
     Client->>Shield: JSON-RPC tools/call
-    Note over Shield: HMAC → Attestation → Regex → AST → Namespace
+    Note over Shield: HMAC → Sequence → Attestation → Regex → AST → Namespace
     alt Policy violation
         Shield-->>Client: JSON-RPC error (-32602 / -32601)
     else Code execution

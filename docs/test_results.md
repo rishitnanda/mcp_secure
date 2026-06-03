@@ -1,6 +1,6 @@
 # Test results
 
-78 tests, 12 modules, 6.22 seconds.
+83 tests, 13 modules, 7.51 seconds.
 
 ```text
 tests/test_schemas.py              17 passed   Pydantic models, JSON-RPC validation
@@ -15,6 +15,7 @@ tests/test_attestation.py           4 passed   Valid cert, expired cert, wrong s
 tests/test_engine.py                3 passed   Stage ordering, clean pass, integration
 tests/test_end_to_end.py            5 passed   E1–E5 against live gateway and adversarial mock server
 tests/test_stdio_proxy.py           3 passed   Pass-through, block, output sanitization
+tests/test_session_state.py         5 passed   Multi-turn session tracking, sequence blocks, TTL
 ```
 
 ## Attack success rate (E5 benchmark)

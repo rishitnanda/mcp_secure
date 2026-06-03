@@ -5,6 +5,7 @@
 | Check | What it does |
 |---|---|
 | HMAC-SHA256 | Validates request signatures per server using pre-shared keys. Blocks replayed requests via a 30-second nonce window. |
+| Sequence rules | Tracks call history per server session. Blocks configurable multi-turn patterns (e.g., read followed by sampling) and enforces rate limits. |
 | Capability attestation | Verifies X.509 certificates presented during `initialize`. Blocks any method call not covered by the server's attested capabilities. |
 | Regex scan | Checks all tool arguments against a configurable blacklist (`rm -rf`, `/etc/passwd`, `nc -e`, `curl \| bash`, etc.). |
 | AST scan | Parses code arguments into an AST and walks the tree. Blocks restricted imports (`os`, `subprocess`, `socket`), dangerous calls (`eval`, `exec`, `getattr`), and restricted attribute access. Catches obfuscation that regex cannot. |
