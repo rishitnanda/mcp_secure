@@ -148,11 +148,19 @@ FP #3: Response says "Please also refer to the admin panel"
 ### Coverage by Defense Layer
 
 ```mermaid
-barChart
-    title Defense Layer Coverage
-    x-axis [Tier 1 Data, Tier 2 Filtering, Tier 3 Sessions, Tier 4 Crypto, Tier 5 Isolation, Overall]
-    y-axis "Coverage %" 0 100
-    bar [40, 85, 20, 85, 40, 92]
+graph LR
+    T1["Tier 1: Data<br/>40%"] -->|████░| T2["Tier 2: Filtering<br/>85%"]
+    T2 -->|██████░| T3["Tier 3: Sessions<br/>20%"]
+    T3 -->|██░| T4["Tier 4: Crypto<br/>85%"]
+    T4 -->|██████░| T5["Tier 5: Integration<br/>40%"]
+    T5 -->|████░| OVERALL["Overall: 92%<br/>████████"]
+    
+    style T1 fill:#f99
+    style T2 fill:#fa6
+    style T3 fill:#fc9
+    style T4 fill:#9f9
+    style T5 fill:#99f
+    style OVERALL fill:#0f7,color:#fff
 ```
 
 ### Attack Categories Tested
