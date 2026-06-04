@@ -50,6 +50,8 @@ Rostamzadeh, M. et al. (2026). *MCP-DPT: A Defense-Placement Taxonomy and Covera
 
 Yang, Y. et al. (2025). *MCPSecBench: A Systematic Security Benchmark and Playground for Testing Model Context Protocols*. arXiv:2508.13220 [cs.CR].
 
+Liu, Y. et al. (2025). “Your AI, My Shell”: Demystifying Prompt Injection Attacks on Agentic AI Coding Editors. arXiv:2509.22040 [cs.CR].
+
 --- 
 
 MIT — see [LICENSE](LICENSE) for details.
