@@ -28,11 +28,22 @@ theme:
 
 nav:
   - Home: index.md
-  - Architecture: architecture.md
-  - Security Layers: security_layers.md
-  - Configuration: configuration.md
-  - Test Results: test_results.md
-  - Limitations: limitations.md
+  - Getting Started:
+    - Demo & Walkthrough: demo.md
+    - Configuration: configuration.md
+  - Security:
+    - Threat Model: threat_model.md
+    - Security Layers: security_layers.md
+    - Session Tracking: session_tracking.md
+  - Evaluation:
+    - Tests: tests.md
+    - Benchmarks: benchmark.md
+  - Integration:
+    - API Reference: api.md
+    - Architecture: architecture.md
+  - Reference:
+    - References & Papers: references.md
+    - Limitations: limitations.md
 
 markdown_extensions:
   - pymdownx.superfences:
