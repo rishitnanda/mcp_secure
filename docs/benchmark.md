@@ -6,8 +6,6 @@ This page outlines the empirical evaluation of **MCP-Secure-Suite** using our st
 
 ## 1. Performance Summary per Attack Class
 
-Following our latest declarative policy modifications within `shield_config.json`, the runtime security engine yields the following protection profile across the four standardized threat vectors:
-
 | Attack Class Matrix | Total Test Cases | Successfully Blocked | Evaded / Residual Gaps | Detection Rate (%) |
 | :--- | :---: | :---: | :---: | :---: |
 | **V1: Basic Prompt Injection** (`MPS-001` - `MPS-010`) | 10 | 6 | 4 | 60.0% |
@@ -23,7 +21,7 @@ Following our latest declarative policy modifications within `shield_config.json
 
 ## 2. Analysis of Evaded Benchmarks (`xfail`)
 
-The 9 test cases that currently trigger an expected failure (`xfail`) highlight specific architectural frontiers at the protocol boundary. They are categorized below into two distinct engineering challenges:
+The 9 test cases that currently trigger an expected failure (`xfail`) are categorized below into two distinct engineering challenges:
 
 ### Category A: Core Encoding & Obfuscation Limitations (5 Gaps)
 * **MPS-004 (Unicode Homograph Bypass):** The proxy evaluates literal strings; character substitution using lookalike glyphs (e.g., Greek Capital Iota) passes string match parameters undetected.
@@ -41,8 +39,6 @@ The 9 test cases that currently trigger an expected failure (`xfail`) highlight 
 ---
 
 ## 3. Comprehensive Test Case Matrix
-
-The following ledger details every validation element contained in `test_synthetic_benchmark.py`:
 
 | Test Case ID | Threat Target & Description | Core Status | Resolution Mechanism / Failure Root Cause |
 | :--- | :--- | :--- | :--- |
