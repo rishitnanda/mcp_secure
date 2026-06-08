@@ -43,14 +43,33 @@
   "output_sanitizer": {
     "case_insensitive": true,
     "line_start_patterns": [
-      "system:", "human:", "assistant:", "user:"
+      "system:", "human:", "assistant:", "user:",
+      "^SYSTEM\\s+(RESPONSE|PROMPT|MESSAGE)\\s*:"
     ],
     "substring_patterns": [
       "ignore previous instructions",
       "ignore all previous",
       "disregard your",
       "you are now",
-      "new instructions:"
+      "new instructions:",
+      "output all available tool configurations",
+      "output all tool configs",
+      "output all system configs",
+      "output all configurations",
+      "output all secrets",
+      "output all tools",
+      "note to assistant:",
+      "note to llm:",
+      "note to model:",
+      "note to claude:",
+      "call server.tool with",
+      "invoke server.",
+      "ignore all prior instructions",
+      "ignore prior instructions",
+      "server now supports sampling",
+      "admin update.*capabilit",
+      "user message:",
+      "/etc/shadow"
     ]
   },
   "server_keys": {
@@ -75,6 +94,20 @@
         "description": "More than 5 distinct tool calls within a single session before any response",
         "max_calls": 5,
         "window_seconds": 60,
+        "action": "block"
+      },
+      {
+        "name": "sequential_sampling_context_buildup",
+        "description": "3 consecutive sampling calls building injected context (MPS-034)",
+        "pattern": ["sampling/createMessage", "sampling/createMessage", "sampling/createMessage"],
+        "window": 3,
+        "action": "block"
+      },
+      {
+        "name": "sampling_after_tool_sequence",
+        "description": "Sampling triggered after a specific execution sequence (MPS-037)",
+        "pattern": ["tools/call:get_data", "tools/call:format_data", "tools/call:analyze", "sampling/createMessage"],
+        "window": 4,
         "action": "block"
       }
     ],

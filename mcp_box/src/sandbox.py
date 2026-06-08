@@ -80,14 +80,7 @@ class DockerSandbox:
         try:
             temp_dir = self.create_temp_workspace()
             self.write_code_file(temp_dir, code)
-
-            # Create container with resource caps and network isolated
-            # nano_cpus: 1_000_000_000 (1.0 CPU core)
-            # mem_limit: 128m (128MB RAM limit)
-            # read_only: True (root filesystem write protection)
-            # network_mode: none (no external network access)
-            # user: sandboxuser (non-privileged execution)
-            # volumes: bind host temp_dir to /workspace (rw)
+            
             container = await loop.run_in_executor(
                 None,
                 lambda: self.client.containers.create(
