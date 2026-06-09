@@ -28,11 +28,17 @@ theme:
 
 nav:
   - Home: index.md
+  - Demo: demo.md
+  - Threat Model: threat_model.md
   - Configuration: configuration.md
   - Architecture: architecture.md
   - Security: security_layers.md
+  - Test Results: test_results.md
+  - API & Gateway Reference: gateway.md
+  - Session Tracking: session_tracking.md
   - Benchmarks: benchmark.md
   - Limitations: limitations.md
+  - Paper Data: paper_data.md
 
 markdown_extensions:
   - pymdownx.superfences:
