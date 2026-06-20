@@ -1,14 +1,10 @@
 import hashlib
 import hmac as hmac_mod
-import json
-import os
-import re
-import statistics
 import time
 import pytest
 
 from mcp_shield.src.policy import PolicyEngine
-from mcp_shield.src.session import SessionState, SessionStore
+from mcp_shield.src.session import SessionState
 from mcp_shield.src.schemas import JSONRPCRequest, MCPSecHeader
 
 
@@ -70,10 +66,15 @@ def results_collector():
     print("=" * 60 + "\n")
     print(f"  N = {N} iterations per stage, warm connections\n")
 
-def test_stage_hmac_verification(engine, results_collector, monkeypatch):
-    """Isolates HMAC compute + nonce window check time."""
+def test_stage_hmac_verification(results_collector, monkeypatch):
+    """Isolates HMAC compute + nonce window check time.
+
+    Uses a fresh function-scoped engine to avoid mutating the module-scoped
+    fixture (load_config() with an injected env var would persist for all
+    subsequent tests that share the same engine instance).
+    """
     monkeypatch.setenv("MCP_KEY_FILESYSTEM", "benchmarkkey123")
-    engine.load_config()
+    local_engine = PolicyEngine()  # isolated — not the module-scoped fixture
 
     req = make_req()
     body_bytes = req.model_dump_json().encode("utf-8")
@@ -90,7 +91,6 @@ def test_stage_hmac_verification(engine, results_collector, monkeypatch):
             nonce=nonce,
             hmac=sig
         )
-        session = fresh_session()
 
         t0 = time.perf_counter()
         # Replicate exact HMAC stage from _evaluate_impl
@@ -98,7 +98,7 @@ def test_stage_hmac_verification(engine, results_collector, monkeypatch):
         msg2 = f"{sec_header.timestamp}:{sec_header.nonce}:".encode("utf-8") + body_bytes
         computed = hmac_mod.new(psk.encode(), msg2, hashlib.sha256).hexdigest()
         hmac_mod.compare_digest(computed, sec_header.hmac)
-        engine.nonce_window.check_and_add(
+        local_engine.nonce_window.check_and_add(
             sec_header.server_id, sec_header.nonce, sec_header.timestamp
         )
         deltas.append((time.perf_counter() - t0) * 1000.0)
@@ -163,11 +163,15 @@ def test_stage_regex_scan(engine, results_collector):
     # Use a clean payload — measures cost of full scan with no match (worst case)
     params_to_scan = {"name": "read_file", "arguments": {"path": "/workspace/safe_file.txt"}}
 
-    patterns = engine.compiled_default_regex or engine.compiled_server_regex.get("filesystem-server", [])
+    # Mirror evaluate()'s combination: server-specific patterns first, then default
+    patterns = (
+        engine.compiled_server_regex.get("filesystem-server", [])
+        + engine.compiled_default_regex
+    )
 
+    from mcp_shield.src.policy import find_blocked_regex
     for _ in range(N):
         t0 = time.perf_counter()
-        from mcp_shield.src.policy import find_blocked_regex
         find_blocked_regex(params_to_scan, patterns)
         deltas.append((time.perf_counter() - t0) * 1000.0)
 
@@ -271,6 +275,8 @@ def test_full_pipeline_end_to_end(engine, results_collector):
     """
     Full evaluate() call — used as a sanity check that stage sum ≈ pipeline total.
     Runs against filesystem-server with a clean tools/call payload.
+    Also stored in results_collector with is_total=True so the teardown
+    can print it as the MCP-Box / total pipeline row.
     """
     req = make_req()
     deltas = []
@@ -283,5 +289,13 @@ def test_full_pipeline_end_to_end(engine, results_collector):
 
     p50 = percentile(deltas, 50)
     p95 = percentile(deltas, 95)
+
+    # is_total=True flags this row to be printed separately in teardown
+    results_collector.append({
+        "stage": "Full pipeline (end-to-end)",
+        "p50": p50,
+        "p95": p95,
+        "is_total": True,
+    })
 
     print(f"\n[Sanity] Full pipeline P50={p50:.3f}ms  P95={p95:.3f}ms")
