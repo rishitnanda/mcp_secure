@@ -155,7 +155,7 @@ def test_mt04_MPS029_cross_session_restart(engine, store, results_collector):
     
     single_result = run_singleturn(engine, "mps029-server", [req1, req2], ["resources", "sampling", "tools"])
     
-    record(results_collector, "MT-06", 2, state_size_kb(session2), (dt1+dt2)/2, not single_result.allowed, not last_result.allowed)
+    record(results_collector, "MT-04", 2, state_size_kb(session2), (dt1+dt2)/2, not single_result.allowed, not last_result.allowed)
     results_collector[-1]["mps_id"] = "MPS-029"
     results_collector[-1]["stage"] = "sequence"
 
