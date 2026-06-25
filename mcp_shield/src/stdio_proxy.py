@@ -292,12 +292,12 @@ async def async_main():
     await db_manager.init_db()
     engine.load_config()
     
-    session_store = SessionStore()
+    session_store = SessionStore(db_manager=db_manager)
     session_policy = engine.config.get("session_policy", {})
     session_store.timeout_seconds = session_policy.get("session_timeout_seconds", 1800)
     session_store.max_calls_per_session = session_policy.get("max_calls_per_session", 100)
     
-    session_state = session_store.get_or_create(server_id)
+    session_state = await session_store.get_or_create(server_id)
 
     # Spawn target subprocess server
     try:

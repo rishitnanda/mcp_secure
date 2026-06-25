@@ -33,6 +33,15 @@ class DatabaseManager:
                 );
                 """
             )
+            await self._db.execute("""
+                CREATE TABLE IF NOT EXISTS session_history (
+                    server_id TEXT NOT NULL,
+                    method TEXT NOT NULL,
+                    tool_name TEXT,
+                    outcome TEXT NOT NULL,
+                    timestamp REAL NOT NULL
+                );
+            """)
             await self._db.commit()
             self._initialized = True
         except Exception as e:
@@ -127,4 +136,63 @@ class DatabaseManager:
                 return [dict(row) for row in rows]
         except Exception as e:
             print(f"Database logs query failed: {e}", file=sys.stderr)
+            return []
+
+    async def _write_session_call(self, server_id: str, method: str, tool_name: Optional[str], outcome: str, timestamp: float):
+        if not self._db:
+            return
+        try:
+            await self._db.execute(
+                """
+                INSERT INTO session_history (server_id, method, tool_name, outcome, timestamp)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (server_id, method, tool_name, outcome, timestamp)
+            )
+            await self._db.commit()
+        except Exception as e:
+            print(f"Async session history write failed: {e}", file=sys.stderr)
+
+    def log_session_call(self, server_id: str, method: str, tool_name: Optional[str], outcome: str) -> Optional[asyncio.Task]:
+        """Dispatches a session history log write to the event loop asynchronously."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # Handle synchronous contexts (like sync pytest benchmarks) where no loop is running
+            if not self._initialized:
+                return None
+            try:
+                # If the DB is fully initialized, execute the write on a temporary loop
+                asyncio.run(self._write_session_call(server_id, method, tool_name, outcome, time.time()))
+            except Exception as e:
+                print(f"Sync fallback session history write failed: {e}", file=sys.stderr)
+            return None
+
+        # Normal async path when an event loop is active
+        if not self._initialized:
+            return loop.create_task(asyncio.sleep(0))
+        return loop.create_task(
+            self._write_session_call(server_id, method, tool_name, outcome, time.time())
+        )
+
+    async def get_session_history(self, server_id: str, within_seconds: int) -> list:
+        """Retrieves recent session history rows for restoration."""
+        if not self._db:
+            return []
+        try:
+            self._db.row_factory = aiosqlite.Row
+            cutoff = time.time() - within_seconds
+            async with self._db.execute(
+                """
+                SELECT method, tool_name, outcome, timestamp 
+                FROM session_history 
+                WHERE server_id = ? AND timestamp > ?
+                ORDER BY timestamp ASC;
+                """,
+                (server_id, cutoff)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+        except Exception as e:
+            print(f"Database session history query failed: {e}", file=sys.stderr)
             return []

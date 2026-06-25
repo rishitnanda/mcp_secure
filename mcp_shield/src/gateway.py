@@ -30,7 +30,7 @@ db_manager = DatabaseManager()
 # NOTE: PolicyEngine.__init__ calls load_config() internally.
 # The explicit load_config() call in lifespan is intentional for hot-reload semantics
 policy_engine = PolicyEngine()
-session_store = SessionStore()
+session_store = SessionStore(db_manager=db_manager)
 sandbox_manager: Optional[DockerSandbox] = None
 
 # Mock routing URLs mapping server_id to backend MCP server URLs
@@ -142,7 +142,7 @@ async def handle_mcp_request(request: Request):
 
     # 3. Security evaluation
     server_id = request.headers.get("x-mcpsec-server-id", "default-server")
-    conn_state = session_store.get_or_create(session_id=server_id)
+    conn_state = await session_store.get_or_create(session_id=server_id)
 
     # Extract HMAC / Replay security headers if present
     timestamp_str = request.headers.get("x-mcpsec-timestamp")

@@ -1,8 +1,9 @@
 .PHONY: install test run-shield run-box build-sandbox-image clean bench_data
 
-VENV = .venv
-PYTHON = $(shell [ -f $(VENV)/bin/python3 ] && echo $(VENV)/bin/python3 || echo python3)
-PIP = $(shell [ -f $(VENV)/bin/pip3 ] && echo $(VENV)/bin/pip3 || echo pip3)
+# Point this to your actual folder name (e.g., venv instead of .venv)
+VENV = venv
+PYTHON = $(shell [ -f $(VENV)/bin/python ] && echo $(VENV)/bin/python || echo python3)
+PIP = $(shell [ -f $(VENV)/bin/pip ] && echo $(VENV)/bin/pip || echo pip3)
 PYTEST = $(shell [ -f $(VENV)/bin/pytest ] && echo $(VENV)/bin/pytest || echo pytest)
 BENCH_OUT = benchmark/bench_results.log
 
@@ -14,7 +15,7 @@ test:
 	$(PYTEST) tests/ -v
 
 run-shield:
-	uvicorn mcp_shield.src.gateway:app --reload --host 127.0.0.1 --port 8000
+	$(VENV)/bin/uvicorn mcp_shield.src.gateway:app --reload --host 127.0.0.1 --port 8000
 
 run-box:
 	@echo "MCP-Box is designed to run in-process as a module imported by MCP-Shield."
