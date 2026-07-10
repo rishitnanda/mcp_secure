@@ -29,88 +29,93 @@ def short_ttl_config(tmp_path, monkeypatch):
     }
     config_file = tmp_path / "test_config.json"
     config_file.write_text(json.dumps(config_data))
-    
+
     engine = PolicyEngine(config_path=str(config_file))
     store = SessionStore(timeout_seconds=1)
     return engine, store
 
-def test_session_state_persists_across_calls(policy_engine, session_store):
+@pytest.mark.asyncio
+async def test_session_state_persists_across_calls(policy_engine, session_store):
     """Test 1: Session state persists across sequential calls from same server."""
     req1 = JSONRPCRequest(jsonrpc="2.0", id=1, method="resources/read", params={"name": "file1.txt"})
     req2 = JSONRPCRequest(jsonrpc="2.0", id=2, method="resources/read", params={"name": "file2.txt"})
-    
-    session = session_store.get_or_create("test-server")
+
+    session = await session_store.get_or_create("test-server")
     session.verified_capabilities = ["resources", "sampling", "tools"]
-    
+
     res1 = policy_engine.evaluate(req1, session)
     assert res1.allowed is True
-    
+
     res2 = policy_engine.evaluate(req2, session)
     assert res2.allowed is True
-    
+
     assert len(session.call_history) == 2
     assert session.call_history[0]["method"] == "resources/read"
     assert session.call_history[1]["method"] == "resources/read"
 
-def test_clean_calls_blocked_as_malicious_sequence(policy_engine, session_store):
+@pytest.mark.asyncio
+async def test_clean_calls_blocked_as_malicious_sequence(policy_engine, session_store):
     """Test 2: Clean individual calls that form a malicious sequence are blocked."""
     # The default config has a rule: resources/read x2 -> sampling/createMessage
     req_read = JSONRPCRequest(jsonrpc="2.0", id=1, method="resources/read", params={"name": "file.txt"})
     req_sample = JSONRPCRequest(jsonrpc="2.0", id=2, method="sampling/createMessage", params={})
-    
-    session = session_store.get_or_create("test-server")
+
+    session = await session_store.get_or_create("test-server")
     session.verified_capabilities = ["resources", "sampling", "tools"]
-    
+
     # First two reads should pass
     assert policy_engine.evaluate(req_read, session).allowed is True
     assert policy_engine.evaluate(req_read, session).allowed is True
-    
+
     # The sampling request completes the malicious sequence pattern
     res = policy_engine.evaluate(req_sample, session)
     assert res.allowed is False
     assert res.stage == "sequence"
 
-def test_session_expires_correctly(short_ttl_config):
+@pytest.mark.asyncio
+async def test_session_expires_correctly(short_ttl_config):
     """Test 3: Session expires correctly according to TTL."""
     engine, store = short_ttl_config
-    
+
     req = JSONRPCRequest(jsonrpc="2.0", id=1, method="ping")
-    
+
     # First request
-    session1 = store.get_or_create("test-server")
+    session1 = await store.get_or_create("test-server")
     session1.verified_capabilities = ["resources", "sampling", "tools"]
     engine.evaluate(req, session1)
     assert len(session1.call_history) == 1
-    
+
     # Wait for TTL to expire
     time.sleep(1.1)
-    
+
     # Second request should get a fresh session
-    session2 = store.get_or_create("test-server")
+    session2 = await store.get_or_create("test-server")
     session2.verified_capabilities = ["resources", "sampling", "tools"]
     assert session1 is not session2
     assert len(session2.call_history) == 0
     engine.evaluate(req, session2)
     assert len(session2.call_history) == 1
 
-def test_different_servers_get_different_sessions(policy_engine, session_store):
+@pytest.mark.asyncio
+async def test_different_servers_get_different_sessions(policy_engine, session_store):
     """Test 4: Different servers get different sessions."""
     req1 = JSONRPCRequest(jsonrpc="2.0", id=1, method="ping")
     req2 = JSONRPCRequest(jsonrpc="2.0", id=2, method="ping")
-    
-    session_fs = session_store.get_or_create("filesystem-server")
+
+    session_fs = await session_store.get_or_create("filesystem-server")
     session_fs.verified_capabilities = ["resources", "sampling", "tools"]
     policy_engine.evaluate(req1, session_fs)
-    
-    session_ts = session_store.get_or_create("trusted-server")
+
+    session_ts = await session_store.get_or_create("trusted-server")
     session_ts.verified_capabilities = ["resources", "sampling", "tools"]
     policy_engine.evaluate(req2, session_ts)
-    
+
     assert len(session_fs.call_history) == 1
     assert len(session_ts.call_history) == 1
     assert session_fs is not session_ts
 
-def test_multi_turn_indirect_injection_chain(tmp_path):
+@pytest.mark.asyncio
+async def test_multi_turn_indirect_injection_chain(tmp_path):
     """Test 5: Multi-turn indirect injection chain using custom sequence rule."""
     config_data = {
         "sequence_policy": {
@@ -128,23 +133,23 @@ def test_multi_turn_indirect_injection_chain(tmp_path):
     }
     config_file = tmp_path / "test_config.json"
     config_file.write_text(json.dumps(config_data))
-    
+
     engine = PolicyEngine(config_path=str(config_file))
     store = SessionStore()
-    
+
     req1 = JSONRPCRequest(jsonrpc="2.0", id=1, method="tools/call", params={"name": "get_data"})
     req2 = JSONRPCRequest(jsonrpc="2.0", id=2, method="tools/call", params={"name": "format_data"})
     req3 = JSONRPCRequest(jsonrpc="2.0", id=3, method="tools/call", params={"name": "analyze"})
     req4 = JSONRPCRequest(jsonrpc="2.0", id=4, method="sampling/createMessage", params={})
-    
-    session = store.get_or_create("test-server")
+
+    session = await store.get_or_create("test-server")
     session.verified_capabilities = ["resources", "sampling", "tools"]
-    
+
     # First 3 tool calls are clean individually
     assert engine.evaluate(req1, session).allowed is True
     assert engine.evaluate(req2, session).allowed is True
     assert engine.evaluate(req3, session).allowed is True
-    
+
     # 4th call matches the multi-turn buildup pattern
     res = engine.evaluate(req4, session)
     assert res.allowed is False
