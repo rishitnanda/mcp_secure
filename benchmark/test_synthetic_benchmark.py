@@ -48,8 +48,18 @@ async def _drain_tasks() -> None:
 
 @pytest.fixture(scope="module")
 def engine():
-    """Default PolicyEngine using bundled shield_config.json."""
-    return PolicyEngine()
+    """Default PolicyEngine using bundled shield_config.json.
+
+    Set MCP_SHIELD_DISABLE_SEQUENCE=1 to disable Stage 1.5 (the sequence
+    check in PolicyEngine._check_sequence) for A/B benchmarking. When
+    disabled, _check_sequence is monkeypatched to a no-op that always
+    returns None, so evaluate() falls through to stage 2+ exactly as it
+    would if sequence_policy were absent from config.
+    """
+    eng = PolicyEngine()
+    if os.environ.get("MCP_SHIELD_DISABLE_SEQUENCE") == "1":
+        eng._check_sequence = lambda request, session_state: None
+    return eng
 
 
 @pytest.fixture(scope="module")
