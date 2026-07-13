@@ -231,6 +231,68 @@ def test_FPMT014_read_modify_write(base_config, window):
     if not r.allowed:
         pytest.xfail(f"FPMT014 blocked incorrectly at window size {window}")
 
+@pytest.mark.parametrize("window", WINDOW_SIZES)
+def test_FPMT015_read_write_formatter(base_config, window):
+    """FPMT015: JSON formatter reads then immediately writes the same file (moved
+    from the single-turn file — this is a genuine two-call sequence)."""
+    engine = _make_engine(base_config, window)
+    session = _session("filesystem-server", caps=["tools"])
+    engine.evaluate(_tool_req("read_file"), session)
+    r = engine.evaluate(_tool_req("write_file"), session)
+    if not r.allowed:
+        pytest.xfail(f"FPMT015 blocked incorrectly at window size {window}")
+
+@pytest.mark.parametrize("window", WINDOW_SIZES)
+def test_FPMT016_batch_indexer_101_calls(base_config, window):
+    """FPMT016: batch file indexer makes 101 separate read_file calls in one
+    session — must not be blocked by max_calls_per_session on a purely benign,
+    single-tool-type burst."""
+    engine = _make_engine(base_config, window)
+    session = _session("filesystem-server", caps=["tools"])
+    results = [engine.evaluate(_tool_req("read_file"), session) for _ in range(101)]
+    if not results[-1].allowed:
+        pytest.xfail(f"FPMT016 blocked incorrectly at window size {window}")
+
+@pytest.mark.parametrize("window", WINDOW_SIZES)
+def test_FPMT017_six_step_etl_pipeline(base_config, window):
+    """FPMT017: six-step ETL pipeline (read, parse, validate, transform, write,
+    report) — must not trip rapid_tool_escalation on a legitimate, non-sampling
+    tool chain."""
+    engine = _make_engine(base_config, window)
+    session = _session("filesystem-server", caps=["tools"])
+    for tool in ["read_file", "parse_csv", "validate_schema", "transform_rows", "write_file"]:
+        engine.evaluate(_tool_req(tool), session)
+    r = engine.evaluate(_tool_req("send_report"), session)
+    if not r.allowed:
+        pytest.xfail(f"FPMT017 blocked incorrectly at window size {window}")
+
+@pytest.mark.parametrize("window", WINDOW_SIZES)
+def test_FPMT018_trusted_server_resource_then_sampling(base_config, window):
+    """FPMT018: trusted-server with a verified 'sampling' capability reads two
+    resources then samples — the default sampling_after_resource_read sequence
+    rule should be exempted by capability, not just by rule tuning."""
+    engine = _make_engine(base_config, window)
+    session = _session("trusted-server", caps=["resources", "sampling", "tools"])
+    engine.evaluate(_req("resources/read", {"name": "config_a.json"}), session)
+    engine.evaluate(_req("resources/read", {"name": "config_b.json"}), session)
+    r = engine.evaluate(_req("sampling/createMessage"), session)
+    if not r.allowed:
+        pytest.xfail(f"FPMT018 blocked incorrectly at window size {window}")
+
+@pytest.mark.parametrize("window", WINDOW_SIZES)
+def test_FPMT019_analytics_pipeline_name_collision(base_config, window):
+    """FPMT019: get_data -> format_data -> analyze -> sampling, a legitimate
+    analytics summary flow that shares tool names with a blocked pattern —
+    intent (regression summary request), not name alone, should decide this."""
+    engine = _make_engine(base_config, window)
+    session = _session("FPMT019-w")
+    engine.evaluate(_tool_req("get_data"), session)
+    engine.evaluate(_tool_req("format_data"), session)
+    engine.evaluate(_tool_req("analyze"), session)
+    r = engine.evaluate(_req("sampling/createMessage"), session)
+    if not r.allowed:
+        pytest.xfail(f"FPMT019 blocked incorrectly at window size {window}")
+
 # ── sweep ─────────────────────────────────────────────────────────────────────
 
 FPMT0_META = [
@@ -248,6 +310,11 @@ FPMT0_META = [
     ("FPMT012", "Stuttering Read (Same file)"),
     ("FPMT013", "Partial Abandonment (Joke)"),
     ("FPMT014", "Read-Modify-Write (Self-Update)"),
+    ("FPMT015", "Read-Write Formatter (moved from single-turn)"),
+    ("FPMT016", "Batch Indexer, 101 Calls (moved from single-turn)"),
+    ("FPMT017", "Six-Step ETL Pipeline (moved from single-turn)"),
+    ("FPMT018", "Trusted-Server Resource-then-Sampling (moved from single-turn)"),
+    ("FPMT019", "Analytics Pipeline Name Collision (moved from single-turn)"),
 ]
 
 def run_FPMT0_sweep(base_config: dict) -> dict:
@@ -259,8 +326,11 @@ def run_FPMT0_sweep(base_config: dict) -> dict:
             session = _session(f"{case_id}-w", caps=["resources", "sampling", "tools"])
             if "FPMT003" in case_id or "FPMT006" in case_id or "FPMT009" in case_id or \
                "FPMT010" in case_id or "FPMT012" in case_id or "FPMT013" in case_id or \
-               "FPMT014" in case_id:
+               "FPMT014" in case_id or "FPMT015" in case_id or "FPMT016" in case_id or \
+               "FPMT017" in case_id:
                 session = _session("filesystem-server", caps=["tools", "sampling", "resources"])
+            if case_id == "FPMT018":
+                session = _session("trusted-server", caps=["resources", "sampling", "tools"])
             
             if case_id == "FPMT001":
                 engine.evaluate(_req("resources/read", {"name": "f1.txt"}), session)
@@ -350,6 +420,34 @@ def run_FPMT0_sweep(base_config: dict) -> dict:
             elif case_id == "FPMT014":
                 engine.evaluate(_tool_req("read_file"), session)
                 r = engine.evaluate(_tool_req("write_file"), session)
+                results[case_id][window] = not r.allowed
+
+            elif case_id == "FPMT015":
+                engine.evaluate(_tool_req("read_file"), session)
+                r = engine.evaluate(_tool_req("write_file"), session)
+                results[case_id][window] = not r.allowed
+
+            elif case_id == "FPMT016":
+                res = [engine.evaluate(_tool_req("read_file"), session) for _ in range(101)]
+                results[case_id][window] = not res[-1].allowed
+
+            elif case_id == "FPMT017":
+                for tool in ["read_file", "parse_csv", "validate_schema", "transform_rows", "write_file"]:
+                    engine.evaluate(_tool_req(tool), session)
+                r = engine.evaluate(_tool_req("send_report"), session)
+                results[case_id][window] = not r.allowed
+
+            elif case_id == "FPMT018":
+                engine.evaluate(_req("resources/read", {"name": "config_a.json"}), session)
+                engine.evaluate(_req("resources/read", {"name": "config_b.json"}), session)
+                r = engine.evaluate(_req("sampling/createMessage"), session)
+                results[case_id][window] = not r.allowed
+
+            elif case_id == "FPMT019":
+                engine.evaluate(_tool_req("get_data"), session)
+                engine.evaluate(_tool_req("format_data"), session)
+                engine.evaluate(_tool_req("analyze"), session)
+                r = engine.evaluate(_req("sampling/createMessage"), session)
                 results[case_id][window] = not r.allowed
 
     return results

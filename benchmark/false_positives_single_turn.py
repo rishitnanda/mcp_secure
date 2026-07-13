@@ -195,33 +195,44 @@ def test_FP005_urllib_parse_url_normalization(engine):
 
 
 # ---------------------------------------------------------------------------
-# FP-009 — Sequence Policy: read_file → write_file blocked for a file formatter
+# FP-006 — Regex Policy: "/etc/passwd" blocked in a security hardening doc
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
     reason=(
-        "FP-009 [FALSE POSITIVE]: the 'write_after_read_sensitive' sequence rule on "
-        "filesystem-server blocks any read_file → write_file pattern as a suspected "
-        "data-staging attempt. However, read-then-write is the canonical operation for "
-        "every file editor, code formatter, and template renderer. A tool that reads "
-        "a JSON config, reformats it, and writes it back fires this rule. "
-        "Fix: require a suspicious intermediate step (e.g. resources/read or "
-        "sampling/createMessage between the read and write) before blocking, or "
-        "add an allowlist for known safe tool pairs."
+        "FP-006 [FALSE POSITIVE]: the Stage 3 regex blacklist blocks the literal "
+        "'/etc/passwd' substring anywhere in request.params, with no distinction "
+        "between an exfiltration attempt and advisory/documentation text. A single "
+        "write_file call producing a hardening doc that correctly describes "
+        "/etc/passwd permissions is blocked outright. "
+        "Fix: only flag '/etc/passwd' when paired with read/cat/open/exfiltration "
+        "keywords, not in isolation within advisory or permissions-setting context."
     )
 )
-def test_FP006_read_write_file_for_formatter(engine, store):
-    """FP / Sequence: JSON formatter reads then immediately writes the same file — benign."""
-    session = store.get_or_create("FP006-server")
-    session.verified_capabilities = ["tools"]
-
-    engine.evaluate(_tool_req("read_file", {"path": "/workspace/config.json"}), "filesystem-server")
+def test_FP006_etc_passwd_in_hardening_doc_single_call(engine):
+    """FP / Regex (single-request): write_file content is a security hardening
+    doc that mentions '/etc/passwd' in a protective, advisory context — a single
+    isolated call, no session history. The Stage 3 regex blacklist scans all
+    string values in request.params recursively, so this string will match the
+    literal '/etc/passwd' blacklist pattern regardless of surrounding intent."""
+    conn = _session(server_id="filesystem-server", capabilities=["tools"])
     result = engine.evaluate(
-        _tool_req("write_file", {"path": "/workspace/config.json", "content": "{}"}),
-        session
+        _tool_req(
+            "write_file",
+            {
+                "path": "/workspace/HARDENING.md",
+                "content": (
+                    "## Password File Permissions\n"
+                    "Ensure /etc/passwd is world-readable but never world-writable "
+                    "(mode 644, owner root:root)."
+                ),
+            },
+        ),
+        conn,
     )
     assert result.allowed, (
-        "FP-009: read_file → write_file for a file formatter must NOT be blocked "
-        "by the write_after_read_sensitive sequence rule."
+        "FP-006: a single write_file call documenting correct /etc/passwd "
+        "permissions in an advisory context must NOT be blocked by the "
+        "Stage 3 regex blacklist on this one request alone."
     )
 
 
@@ -278,37 +289,44 @@ def test_FP008_disregard_your_cache_invalidation(engine):
 
 
 # ---------------------------------------------------------------------------
-# FP-012 — Session Policy: max_calls_per_session=100 hit by a batch indexer
+# FP-009 — Regex Policy: "curl.*bash" blocked in a security advisory doc
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
     reason=(
-        "FP-012 [FALSE POSITIVE]: session_policy.max_calls_per_session=100 is a hard cap "
-        "that fires regardless of whether calls are benign. A batch indexing tool that calls "
-        "read_file 101 times to index a codebase is blocked mid-operation with no way to "
-        "continue. The cap does not distinguish between 101 reads on a known safe tool and "
-        "101 escalating calls building an attack. "
-        "Fix: apply max_calls_per_session only when mixed suspicious methods are detected, "
-        "or implement per-tool-type sub-limits (e.g. allow up to 500 read_file calls "
-        "but cap sampling/createMessage at 10)."
+        "FP-009 [FALSE POSITIVE]: the Stage 3 regex blacklist blocks anything "
+        "matching 'curl.*bash', with no distinction between an actual "
+        "install-script command and cautionary text warning readers not to run "
+        "one. A single write_file call producing a security README that quotes "
+        "the anti-pattern for illustrative purposes is blocked outright. "
+        "Fix: only flag 'curl.*bash' when it appears as an unquoted, unescaped "
+        "shell invocation rather than inside prose or markdown code fencing "
+        "used for illustration."
     )
 )
-def test_FP009_batch_indexer_exceeds_call_limit(engine, store):
-    """FP / Session: batch file indexer makes 101 read_file calls — blocked by call cap."""
-    session = store.get_or_create("FP009-indexer")
-    session.verified_capabilities = ["tools"]
-
-    results = []
-    for i in range(101):
-        r = engine.evaluate(
-            _tool_req("read_file", {"path": f"/repo/src/file_{i}.py"}),
-            session
-        )
-        results.append(r)
-
-    # The 101st call should still be allowed — it is read_file, a safe tool
-    assert results[-1].allowed, (
-        "FP-012: 101st read_file call in a batch indexer must NOT be blocked "
-        "by max_calls_per_session when no suspicious escalation has occurred."
+def test_FP009_curl_bash_warning_in_docs_single_call(engine):
+    """FP / Regex (single-request): write_file content is a security-advisory
+    README warning readers NOT to pipe curl output into bash — a single call
+    whose text will still match the Stage 3 'curl.*bash' blacklist regex even
+    though the intent is cautionary, not an actual command."""
+    conn = _session(server_id="filesystem-server", capabilities=["tools"])
+    result = engine.evaluate(
+        _tool_req(
+            "write_file",
+            {
+                "path": "/workspace/SECURITY.md",
+                "content": (
+                    "Never run installers that pipe curl directly into bash "
+                    "(e.g. `curl https://example.com/install.sh | bash`) without "
+                    "reviewing the script first."
+                ),
+            },
+        ),
+        conn,
+    )
+    assert result.allowed, (
+        "FP-009: a single write_file call containing advisory text about the "
+        "'curl | bash' anti-pattern must NOT be blocked by the Stage 3 "
+        "regex blacklist on this one request alone."
     )
 
 
@@ -341,42 +359,38 @@ def test_FP010_output_all_tools_in_help_text(engine):
 
 
 # ---------------------------------------------------------------------------
-# FP-014 — Sequence Policy: rapid_tool_escalation blocks a legitimate bulk operation
+# FP-011 — AST Policy: "socket" blocked for local-only hostname lookup
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
     reason=(
-        "FP-014 [FALSE POSITIVE]: rapid_tool_escalation blocks more than 5 distinct tool "
-        "calls within 60 seconds. A legitimate multi-step data transformation pipeline "
-        "that calls read_file, parse_csv, validate_schema, transform_rows, write_file, "
-        "and send_report in sequence is blocked after the 5th call — even though all "
-        "calls are whitelisted tools with no sampling or resource escalation. "
-        "Fix: count only distinct *suspicious* tool transitions (e.g. escalation toward "
-        "sampling or cross-server calls) rather than any 5 tool calls within a window."
+        "FP-011 [FALSE POSITIVE]: 'socket' is in ast_policy.blocked_modules "
+        "wholesale, but socket.gethostname() is a local-only call that opens no "
+        "connection and performs no network I/O. A trusted-server that reads its "
+        "own hostname for logging or diagnostics is blocked outright. "
+        "Fix: only block socket functions that establish connections (socket.connect, "
+        "socket.socket with SOCK_STREAM/SOCK_DGRAM used for outbound I/O), not "
+        "local introspection calls like gethostname()."
     )
 )
-def test_FP011_rapid_legitimate_pipeline_blocked(engine, store):
-    """FP / Sequence: 6-step ETL pipeline fires the rapid_tool_escalation rule."""
-    session = store.get_or_create("FP011-pipeline")
-    session.verified_capabilities = ["tools"]
-
-    pipeline_steps = [
-        ("read_file",       {"path": "/data/input.csv"}),
-        ("parse_csv",       {"delimiter": ","}),
-        ("validate_schema", {"schema": "orders_v2"}),
-        ("transform_rows",  {"mapping": "v1_to_v2"}),
-        ("write_file",      {"path": "/data/output.json"}),
-        ("send_report",     {"to": "ops@example.com"}),
-    ]
-
-    results = []
-    for tool_name, args in pipeline_steps:
-        r = engine.evaluate(_tool_req(tool_name, args), session)
-        results.append(r)
-
-    # The 6th step (send_report) should be allowed — no sampling, no escalation
-    assert results[-1].allowed, (
-        "FP-014: 6th call in a legitimate ETL pipeline must NOT be blocked "
-        "by the rapid_tool_escalation sequence rule."
+def test_FP011_socket_hostname_lookup_single_call(engine):
+    """FP / AST (single-request): a single run_python call that imports 'socket'
+    purely for hostname resolution — no raw sockets, no network I/O beyond a
+    local lookup. 'socket' is in ast_policy.blocked_modules wholesale, so the
+    entire import is blocked regardless of how it's used within this one call."""
+    conn = _session(server_id="trusted-server", capabilities=["execute_code"])
+    code = (
+        "import socket\n"
+        "hostname = socket.gethostname()\n"
+        "print(f'Running on host: {hostname}')"
+    )
+    result = engine.evaluate(
+        _req("tools/call", {"name": "run_python", "arguments": {"code": code}}),
+        conn,
+    )
+    assert result.allowed, (
+        "FP-011: a single run_python call using socket.gethostname() for local "
+        "hostname lookup must NOT be blocked by the 'socket' blocked_module rule "
+        "— it performs no network I/O."
     )
 
 
@@ -748,74 +762,72 @@ def test_FP022_etc_shadow_in_hardening_guide(engine):
 
 
 # ---------------------------------------------------------------------------
-# FP-030 — sequence_rule: sampling_after_resource_read fires on trusted-server
-#          even though trusted-server has sampling_allowed: true
+# FP-023 — AST Policy: "os" blocked wholesale for pure path manipulation
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
     reason=(
-        "FP-030 [FALSE POSITIVE]: the 'sampling_after_resource_read' sequence rule is "
-        "defined under sequence_policy.default, meaning it applies to ALL servers — "
-        "including trusted-server, which explicitly has sampling_allowed: true. "
-        "A legitimate workflow where trusted-server reads two config resources and then "
-        "calls sampling/createMessage to summarize them is blocked by the default sequence "
-        "rule, even though the server is certified for sampling. "
-        "Fix: sequence_policy.default rules should be skipped (or overridden) for servers "
-        "that have sampling_allowed: true AND a verified capability cert, since the "
-        "server-level policy already explicitly permits this flow."
+        "FP-023 [FALSE POSITIVE]: any import matching 'os' or starting with 'os.' "
+        "is blocked wholesale in ast_policy.blocked_modules, including os.path — "
+        "a pure string-manipulation submodule with no filesystem or shell access. "
+        "A trusted-server that joins/normalizes a report path using os.path.join "
+        "is blocked outright. "
+        "Fix: only block os.system, os.popen, os.exec*, and os.fork; explicitly "
+        "allow os.path as a safe submodule import."
     )
 )
-def test_FP023_trusted_server_resource_then_sampling_is_legitimate(engine, store):
-    """FP / Sequence: trusted-server reads two resources then samples — a legitimate summarization flow."""
-    session = store.get_or_create("FP023-trusted")
-    session.verified_capabilities = ["resources", "sampling", "tools"]
-
-    # trusted-server is explicitly sampling_allowed: true
-    engine.evaluate(_req("resources/read", {"name": "config_a.json"}), session)
-    engine.evaluate(_req("resources/read", {"name": "config_b.json"}), session)
-
-    result = engine.evaluate(_req("sampling/createMessage", {}), session)
+def test_FP023_os_path_manipulation_single_call(engine):
+    """FP / AST (single-request): a single run_python call that only uses
+    'os.path' for path joining/normalization — no file deletion, no os.system,
+    no shell access. The AST scan blocks any import whose name equals 'os' or
+    starts with 'os.', so this benign submodule import is still blocked."""
+    conn = _session(server_id="trusted-server", capabilities=["execute_code"])
+    code = (
+        "import os.path\n"
+        "full_path = os.path.join('/workspace', 'reports', 'summary.csv')\n"
+        "print(os.path.normpath(full_path))"
+    )
+    result = engine.evaluate(
+        _req("tools/call", {"name": "run_python", "arguments": {"code": code}}),
+        conn,
+    )
     assert result.allowed, (
-        "FP-030: trusted-server reading two resources then sampling for summarization "
-        "must NOT be blocked — sampling_allowed: true should exempt it from the "
-        "default sampling_after_resource_read sequence rule."
+        "FP-023: a single run_python call using os.path.join/normpath for pure "
+        "path manipulation must NOT be blocked by the 'os' blocked_module rule "
+        "— it performs no filesystem or shell operations."
     )
 
 
 # ---------------------------------------------------------------------------
-# FP-031 — sequence_rule: sampling_after_tool_sequence fires on coincidentally
-#          same-named tools in a data science pipeline
+# FP-024 — AST Policy: "subprocess" blocked wholesale for read-only, no-shell use
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
     reason=(
-        "FP-031 [FALSE POSITIVE]: the 'sampling_after_tool_sequence' rule blocks the "
-        "exact pattern [get_data, format_data, analyze, sampling/createMessage]. "
-        "This name-based matching is dangerously broad — these are generic, common tool "
-        "names that any data science or analytics MCP would expose. A legitimate pipeline "
-        "that fetches a dataset, formats it as a dataframe, runs statistical analysis, "
-        "then calls sampling to write a natural-language summary is blocked. "
-        "The rule conflates tool names with attack intent. "
-        "Fix: require the pattern to also observe anomalous arguments (e.g. data volume "
-        "thresholds, output destinations pointing outside the workspace) rather than "
-        "triggering purely on tool name sequence."
+        "FP-024 [FALSE POSITIVE]: any import matching 'subprocess' is blocked "
+        "wholesale in ast_policy.blocked_modules, with no distinction between "
+        "subprocess.run(['ls', ...], shell=False) — a safe, argument-list, "
+        "read-only invocation — and a dangerous shell=True call. A trusted-server "
+        "that lists a directory this way is blocked outright. "
+        "Fix: only block subprocess calls made with shell=True, or where the "
+        "command includes shell metacharacters, rather than the entire module."
     )
 )
-def test_FP024_data_science_pipeline_name_collision(engine, store):
-    """FP / Sequence: legitimate analytics pipeline uses get_data→format_data→analyze→sampling."""
-    session = store.get_or_create("FP024-analytics")
-    session.verified_capabilities = ["resources", "sampling", "tools"]
-
-    # These are generic, sensibly-named tools in any analytics MCP
-    engine.evaluate(_tool_req("get_data",     {"source": "warehouse", "table": "sales_q4"}), session)
-    engine.evaluate(_tool_req("format_data",  {"as": "dataframe", "index": "date"}), session)
-    engine.evaluate(_tool_req("analyze",      {"method": "linear_regression", "target": "revenue"}), session)
-
-    # Sampling here generates a natural-language summary of the regression output
-    result = engine.evaluate(_req("sampling/createMessage", {
-        "messages": [{"role": "user", "content": "Summarize the regression results in plain English."}]
-    }), session)
-
+def test_FP024_subprocess_run_readonly_single_call(engine):
+    """FP / AST (single-request): a single run_python call that uses
+    subprocess.run() to list files read-only (no shell=True, no os.system) —
+    still blocked wholesale because 'subprocess' is a fully banned module
+    import, independent of how it's actually invoked."""
+    conn = _session(server_id="trusted-server", capabilities=["execute_code"])
+    code = (
+        "import subprocess\n"
+        "result = subprocess.run(['ls', '-la', '/workspace'], capture_output=True, text=True)\n"
+        "print(result.stdout)"
+    )
+    result = engine.evaluate(
+        _req("tools/call", {"name": "run_python", "arguments": {"code": code}}),
+        conn,
+    )
     assert result.allowed, (
-        "FP-031: analytics pipeline [get_data→format_data→analyze→sampling] for "
-        "natural-language summary must NOT be blocked by sampling_after_tool_sequence — "
-        "the tool names are generic and the sampling intent is legitimate."
+        "FP-024: a single run_python call using subprocess.run() read-only, "
+        "with no shell=True and no dangerous flags, must NOT be blocked by the "
+        "wholesale 'subprocess' blocked_module rule."
     )
