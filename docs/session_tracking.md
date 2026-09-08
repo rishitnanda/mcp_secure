@@ -32,7 +32,9 @@ session = session_store.get_or_create("filesystem-server")
 - `call_history` — an append-only list of every method call processed in this session. Each entry records the method name and, for `tools/call`, the tool name.
 - `last_activity` — timestamp of the most recent call, used for TTL expiry.
 
-**TTL expiry.** Sessions expire after a configurable idle timeout (`session_timeout_seconds`, default value set in `shield_config.json`). When `get_or_create` is called and the existing session has exceeded its TTL, it is discarded and a fresh session is returned. This means an attacker who deliberately triggers a gateway restart or connection reset loses their accumulated history — a known limitation documented in the threat model.
+**TTL expiry.** Sessions expire after a configurable idle timeout (`session_timeout_seconds`, default **1800 seconds**, set in `shield_config.json`). When `get_or_create` is called and the existing session has exceeded its TTL, it is discarded and a fresh session is returned. This means an attacker who deliberately triggers a gateway restart or connection reset loses their accumulated history — a known limitation documented in the threat model.
+
+**Call history cap.** In the default configuration, `call_history` is also bounded by a cap of **100 calls per session**. Once a session reaches the cap, sequence rule evaluation still runs against the retained window, but this is a fixed retention limit distinct from the sliding `window` parameter on individual rules — see [Limitations → Window-size selection](limitations.md#window-size-selection) for how window size interacts with detection and false-positive rates.
 
 **Session isolation.** Each `server_id` maps to exactly one session. Two servers cannot share or read each other's call history. This prevents one server from exploiting context accumulated by another.
 

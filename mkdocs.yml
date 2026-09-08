@@ -38,7 +38,6 @@ nav:
   - Session Tracking: session_tracking.md
   - Benchmarks: benchmark.md
   - Limitations: limitations.md
-  - Paper Data: paper_data.md
 
 markdown_extensions:
   - pymdownx.superfences:

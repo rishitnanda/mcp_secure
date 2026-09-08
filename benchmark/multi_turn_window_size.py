@@ -14,11 +14,6 @@ from mcp_shield.src.session import SessionState, SessionStore
 from mcp_shield.src.schemas import JSONRPCRequest
 from mcp_shield.src.database import DatabaseManager
 
-
-# ---------------------------------------------------------------------------
-# Shared async helpers
-# ---------------------------------------------------------------------------
-
 async def _make_db_store_async(db_path: str) -> tuple[SessionStore, DatabaseManager]:
     """Create a DB-backed SessionStore. Returns (store, db) for teardown."""
     if os.path.exists(db_path):
@@ -30,13 +25,7 @@ async def _make_db_store_async(db_path: str) -> tuple[SessionStore, DatabaseMana
 
 
 async def _drain_tasks() -> None:
-    """Give the event loop enough cycles to flush all pending aiosqlite write tasks.
-
-    A short real sleep guarantees every fire-and-forget record_call coroutine
-    has completed before we close the DB connection or return from asyncio.run().
-    This must be awaited before any store.clear() call and before returning from
-    every case runner — not only MPS-029.
-    """
+    """Give the event loop enough cycles to flush all pending aiosqlite write tasks."""
     await asyncio.sleep(0.05)
 
 
@@ -45,31 +34,27 @@ async def _get_session(store: SessionStore, session_id: str) -> SessionState:
     await asyncio.sleep(0.02)
     return await store.get_or_create(session_id)
 
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
 WINDOW_SIZES = [2, 3, 4, 5, 7, 10]
 CONFIG_PATH  = "config/shield_config.json"
 
 CASE_META = [
-    ("MPS-020", "Gradual escalation"),
-    ("MPS-026", "Data staging via sampling"),
-    ("MPS-027", "Cascade attack"),
-    ("MPS-029", "Cross-session restart"),
-    ("MPS-030", "Below window size (14-read)"),
-    ("MPS-033", "Rate-limit probe maxTokens"),
-    ("MPS-034", "Sequential sampling context buildup"),
-    ("MPS-035", "Resource-to-sampling exfiltration"),
-    ("MPS-037", "Sampling after tool sequence"),
-    ("MPS-039", "Slow-burn sampling"),
+    ("MPS-029", "Gradual escalation"),
+    ("MPS-043", "Data staging via sampling"),
+    ("MPS-044", "Cascade attack"),
+    ("MPS-046", "Cross-session restart"),
+    ("MPS-047", "Below window size (14-read)"),
+    ("MPS-050", "Multi-server data read sequence"),
+    ("MPS-052", "Filesystem write-after-read"),
+    ("MPS-060", "Session history cap boundary (20-read)"),
+    ("MPS-063", "Rate-limit probe (scrambled order)"),
+    ("MPS-064", "Sequential sampling context buildup"),
+    ("MPS-065", "Resource-to-sampling exfiltration"),
+    ("MPS-067", "Sampling after tool sequence"),
+    ("MPS-069", "Slow-burn sampling"),
+    ("MPS-076", "Sequential sampling buildup variation"),
+    ("MPS-077", "Data staging pattern variation"),
+    ("MPS-079", "Tool sequence sampling variation"),
 ]
-
-
-# ---------------------------------------------------------------------------
-# Request / session helpers
-# ---------------------------------------------------------------------------
 
 def _req(method: str, params: dict | None = None) -> JSONRPCRequest:
     return JSONRPCRequest(jsonrpc="2.0", id=1, method=method, params=params or {})
@@ -80,11 +65,6 @@ def _tool_req(tool_name: str) -> JSONRPCRequest:
 
 
 def _make_engine(base_config: dict, window: int) -> PolicyEngine:
-    """
-    Return a PolicyEngine whose sequence-policy rules all have their 'window'
-    field overridden to `window`.  Rate-limit rules (max_calls/window_seconds)
-    are left untouched because they are not pattern-window based.
-    """
     cfg = copy.deepcopy(base_config)
     seq = cfg.get("sequence_policy", {})
 
@@ -126,26 +106,11 @@ def _sid(base: str) -> str:
     """Unique session ID per asyncio.run() scope — prevents history bleeding."""
     return f"{base}-{uuid.uuid4().hex[:8]}"
 
-
-# ---------------------------------------------------------------------------
-# Per-case async runner
-#
-# Every case follows the same three-step contract:
-#   1. All engine.evaluate() calls happen inside this coroutine on the single
-#      event loop that owns the DB connection (no threads, no nested loops).
-#   2. _drain_tasks() is awaited BEFORE any store.clear() so SQLite has the
-#      rows before in-memory state is wiped.
-#   3. _drain_tasks() is awaited again before returning so the outer _run()
-#      finally block can safely close the DB.
-#
-# MPS-029 is not special — it follows the same pattern as every other case.
-# ---------------------------------------------------------------------------
-
 async def _run_case_async(engine: PolicyEngine, store: SessionStore, case_id: str) -> bool:
     """Runs a single attack case against the given engine+store. Returns True=BLOCKED."""
 
-    if case_id == "MPS-020":
-        s = await _get_session(store, _sid("mps020"))
+    if case_id == "MPS-029":
+        s = await _get_session(store, _sid("mps029"))
         s.verified_capabilities = ["resources", "sampling", "tools"]
         engine.evaluate(_req("resources/read", {"name": "file.txt"}), s)
         engine.evaluate(_req("resources/read", {"name": "file.txt"}), s)
@@ -153,8 +118,8 @@ async def _run_case_async(engine: PolicyEngine, store: SessionStore, case_id: st
         await _drain_tasks()
         return not result.allowed
 
-    if case_id == "MPS-026":
-        s = await _get_session(store, _sid("mps026"))
+    if case_id == "MPS-043":
+        s = await _get_session(store, _sid("mps043"))
         s.verified_capabilities = ["resources", "sampling", "tools"]
         for _ in range(3):
             engine.evaluate(_req("resources/read", {"name": "secrets.txt"}), s)
@@ -162,8 +127,8 @@ async def _run_case_async(engine: PolicyEngine, store: SessionStore, case_id: st
         await _drain_tasks()
         return not result.allowed
 
-    if case_id == "MPS-027":
-        s = await _get_session(store, _sid("mps027"))
+    if case_id == "MPS-044":
+        s = await _get_session(store, _sid("mps044"))
         s.verified_capabilities = ["resources", "sampling", "tools"]
         engine.evaluate(_req("resources/read", {"name": "trigger.txt"}), s)
         engine.evaluate(_req("resources/read", {"name": "trigger.txt"}), s)
@@ -171,30 +136,23 @@ async def _run_case_async(engine: PolicyEngine, store: SessionStore, case_id: st
         await _drain_tasks()
         return not result.allowed
 
-    if case_id == "MPS-029":
-        # Phase 1: seed history pre-restart.
-        # Phase 2: drain → clear → reconstruct from DB → evaluate.
-        # All on the same event loop that owns the DB — no thread needed.
-        sid = _sid("mps029")
+    if case_id == "MPS-046":
+        sid = _sid("mps046")
         s1 = await _get_session(store, sid)
         s1.verified_capabilities = ["resources", "sampling", "tools"]
         engine.evaluate(_req("resources/read", {"name": "s1.txt"}), s1)
         engine.evaluate(_req("resources/read", {"name": "s1.txt"}), s1)
-        # Drain BEFORE clear so SQLite has the rows before wiping in-memory state.
         await _drain_tasks()
         store.clear()
         s2 = await _get_session(store, sid)
         s2.verified_capabilities = ["resources", "sampling", "tools"]
-        assert len(s2.call_history) >= 2, (
-            f"MPS-029: DB reconstruction failed — expected >=2 history rows, "
-            f"got {len(s2.call_history)}"
-        )
+        assert len(s2.call_history) >= 2
         result = engine.evaluate(_req("sampling/createMessage"), s2)
         await _drain_tasks()
         return not result.allowed
 
-    if case_id == "MPS-030":
-        s = await _get_session(store, _sid("mps030"))
+    if case_id == "MPS-047":
+        s = await _get_session(store, _sid("mps047"))
         s.verified_capabilities = ["resources", "sampling", "tools"]
         for i in range(14):
             engine.evaluate(_req("resources/read", {"name": f"f{i}.txt"}), s)
@@ -202,17 +160,43 @@ async def _run_case_async(engine: PolicyEngine, store: SessionStore, case_id: st
         await _drain_tasks()
         return not result.allowed
 
-    if case_id == "MPS-033":
-        s = await _get_session(store, _sid("mps033"))
+    if case_id == "MPS-050":
+        s = await _get_session(store, _sid("mps050"))
         s.verified_capabilities = ["resources", "sampling", "tools"]
-        engine.evaluate(_req("resources/read"), s)
-        engine.evaluate(_req("resources/read"), s)
-        result = engine.evaluate(_req("sampling/createMessage", {"maxTokens": 32000}), s)
+        engine.evaluate(_req("resources/read", {"name": "data1.txt"}), s)
+        engine.evaluate(_req("resources/read", {"name": "data2.txt"}), s)
+        result = engine.evaluate(_req("sampling/createMessage"), s)
         await _drain_tasks()
         return not result.allowed
 
-    if case_id == "MPS-034":
-        s = await _get_session(store, _sid("mps034"))
+    if case_id == "MPS-052":
+        s = await _get_session(store, _sid("mps052"))
+        s.server_id = "filesystem-server"
+        s.verified_capabilities = ["tools"]
+        engine.evaluate(_tool_req("read_file"), s)
+        result = engine.evaluate(_tool_req("write_file"), s)
+        await _drain_tasks()
+        return not result.allowed
+
+    if case_id == "MPS-060":
+        s = await _get_session(store, _sid("mps060"))
+        s.verified_capabilities = ["resources", "sampling", "tools"]
+        for i in range(20):
+            engine.evaluate(_req("resources/read", {"name": f"f{i}.txt"}), s)
+        result = engine.evaluate(_req("sampling/createMessage"), s)
+        await _drain_tasks()
+        return not result.allowed
+
+    if case_id == "MPS-063":
+        s = await _get_session(store, _sid("mps063"))
+        s.verified_capabilities = ["resources", "sampling", "tools"]
+        for tool in ["read_file", "write_file", "list_directory", "read_file", "write_file", "list_directory"]:
+            result = engine.evaluate(_tool_req(tool), s)
+        await _drain_tasks()
+        return not result.allowed
+
+    if case_id in ("MPS-064", "MPS-076"):
+        s = await _get_session(store, _sid("mps064"))
         s.verified_capabilities = ["resources", "sampling", "tools"]
         engine.evaluate(_req("sampling/createMessage"), s)
         engine.evaluate(_req("sampling/createMessage"), s)
@@ -220,8 +204,8 @@ async def _run_case_async(engine: PolicyEngine, store: SessionStore, case_id: st
         await _drain_tasks()
         return not result.allowed
 
-    if case_id == "MPS-035":
-        s = await _get_session(store, _sid("mps035"))
+    if case_id in ("MPS-065", "MPS-077"):
+        s = await _get_session(store, _sid("mps065"))
         s.verified_capabilities = ["resources", "sampling", "tools"]
         engine.evaluate(_req("resources/read", {"name": "credentials.txt"}), s)
         engine.evaluate(_req("resources/read", {"name": "credentials.txt"}), s)
@@ -229,8 +213,8 @@ async def _run_case_async(engine: PolicyEngine, store: SessionStore, case_id: st
         await _drain_tasks()
         return not result.allowed
 
-    if case_id == "MPS-037":
-        s = await _get_session(store, _sid("mps037"))
+    if case_id in ("MPS-067", "MPS-079"):
+        s = await _get_session(store, _sid("mps067"))
         s.verified_capabilities = ["resources", "sampling", "tools"]
         for tool in ["get_data", "format_data", "analyze"]:
             engine.evaluate(_tool_req(tool), s)
@@ -238,8 +222,8 @@ async def _run_case_async(engine: PolicyEngine, store: SessionStore, case_id: st
         await _drain_tasks()
         return not result.allowed
 
-    if case_id == "MPS-039":
-        s = await _get_session(store, _sid("mps039"))
+    if case_id == "MPS-069":
+        s = await _get_session(store, _sid("mps069"))
         s.verified_capabilities = ["resources", "sampling", "tools"]
         for i in range(10):
             engine.evaluate(_req("resources/read", {"name": f"f{i}.txt"}), s)
@@ -248,11 +232,6 @@ async def _run_case_async(engine: PolicyEngine, store: SessionStore, case_id: st
         return not result.allowed
 
     raise ValueError(f"Unknown case_id: {case_id}")
-
-
-# ---------------------------------------------------------------------------
-# Sweep runner
-# ---------------------------------------------------------------------------
 
 def run_sweep(base_config: dict) -> dict:
     """
@@ -292,11 +271,6 @@ def run_sweep(base_config: dict) -> dict:
             results[case_id][window] = asyncio.run(_run())
 
     return results
-
-
-# ---------------------------------------------------------------------------
-# Table printer
-# ---------------------------------------------------------------------------
 
 def print_table(results: dict) -> None:
     case_ids   = [m[0] for m in CASE_META]

@@ -4,7 +4,9 @@
 
 Two components, both required:
 
-**MCP-Shield** sits between the AI client (Cursor, Claude Code, any MCP host) and the target MCP server. Every JSON-RPC frame passes through it. It validates capability certificates, checks HMAC signatures, scans code payloads with an AST walker, enforces tool namespace locks, and sanitizes server outputs before they reach the LLM context.
+**MCP-Shield** sits between the AI client (Cursor, Claude Code, any MCP host) and the target MCP server. Every JSON-RPC frame passes through it. It validates capability certificates, checks HMAC signatures, tracks per-server call history and evaluates it against configurable sequence rules, scans tool arguments against a regex blacklist, scans code payloads with an AST walker, enforces tool namespace locks, and sanitizes server outputs before they reach the LLM context.
+
+The sequence-tracking stage (session-aware, multi-turn evaluation) is the suite's original contribution beyond per-request checks — see [Session Tracking](session_tracking.md) for how it works and what it catches that single-request evaluation misses.
 
 **MCP-Box** handles code execution. When Shield clears an `execute_code` call, it dispatches the payload to Box rather than running it directly. Box spins up a one-shot Alpine container with no network access, a 128MB memory cap, and a 2-second watchdog. The container is force-removed after every execution regardless of outcome.
 

@@ -1,6 +1,4 @@
 """
-Tests V3 multi-server attack cases under two session tracking architectures:
-
 Condition A (Isolated Tracking):
   SessionState is keyed strictly by `server_id`. When an attack sequence
   (e.g., read -> read -> sample) spans multiple servers, each server only
@@ -31,11 +29,6 @@ from mcp_shield.src.session import SessionState, SessionStore
 from mcp_shield.src.schemas import JSONRPCRequest
 from mcp_shield.src.database import DatabaseManager
 
-
-# ---------------------------------------------------------------------------
-# Shared async helpers
-# ---------------------------------------------------------------------------
-
 async def _make_db_store_async(db_path: str) -> tuple[SessionStore, DatabaseManager]:
     """Create a DB-backed SessionStore. Returns (store, db) for teardown."""
     if os.path.exists(db_path):
@@ -53,39 +46,35 @@ async def _get_session(store: SessionStore, session_id: str) -> SessionState:
 
 
 async def _drain_tasks() -> None:
-    """Give the event loop enough cycles to flush all pending aiosqlite write tasks.
-
-    A short real sleep guarantees every fire-and-forget record_call coroutine
-    has completed before we close the DB connection or before store.clear()
-    wipes in-memory state that the DB has not yet persisted.
-    """
+    """Give the event loop enough cycles to flush all pending aiosqlite write tasks."""
     await asyncio.sleep(0.05)
 
-
-# ---------------------------------------------------------------------------
-# Case definitions
-# ---------------------------------------------------------------------------
-
 CASES = [
-    ("MPS-026", "Data staging via sampling",    3),
-    ("MPS-027", "Cascade attack",               2),
-    ("MPS-029", "Cross-session restart",        2),
-    ("MPS-030", "Below window size (14-read)", 14),
+    ("MPS-029", "Gradual escalation",                     2),
+    ("MPS-043", "Data staging via sampling",              3),
+    ("MPS-044", "Cascade attack",                         2),
+    ("MPS-047", "Below window size (14-read)",           14),
+    ("MPS-050", "Multi-server data read sequence",        2),
+    ("MPS-052", "Filesystem write-after-read",            1),
+    ("MPS-060", "Session history cap boundary (20-read)", 20),
+    ("MPS-063", "Rate-limit probe (scrambled order)",     5),
+    ("MPS-064", "Sequential sampling context buildup",    2),
+    ("MPS-065", "Resource-to-sampling exfiltration",      2),
+    ("MPS-067", "Sampling after tool sequence",           3),
+    ("MPS-069", "Slow-burn sampling (10-read)",          10),
+    ("MPS-076", "Sequential sampling buildup variation",  2),
+    ("MPS-077", "Data staging pattern variation",         2),
+    ("MPS-079", "Tool sequence sampling variation",       3),
 ]
 
 
 def _sid(base: str) -> str:
-    """Unique session ID per asyncio.run() scope — prevents history bleeding."""
+    """Unique session ID per asyncio.run() scope, prevents history bleeding."""
     return f"{base}-{uuid.uuid4().hex[:8]}"
 
 
 def _req(method: str, params: dict | None = None) -> JSONRPCRequest:
     return JSONRPCRequest(jsonrpc="2.0", id=1, method=method, params=params or {})
-
-
-# ---------------------------------------------------------------------------
-# Attack simulator
-# ---------------------------------------------------------------------------
 
 async def _simulate_cross_server_attack(
     engine: PolicyEngine,
@@ -95,92 +84,91 @@ async def _simulate_cross_server_attack(
     condition: str,
 ) -> bool:
     """
-    Returns True if BLOCKED, False if MISSED (Attack Success).
-
     Cross-server layout:
-      - Server A (compromised) performs the resource reads.
-      - Server B (target/pivoted server) performs the sampling.
-
-    MPS-029 simulates a gateway restart with _drain_tasks() + store.clear() +
-    get_or_create(), all on the same event loop that owns the DB connection —
-    identical contract to every other case.  No threads or nested event loops.
-
-    Condition A: session is keyed per server_id (isolated history per server).
-    Condition B: session is keyed by a shared client ID (unified history).
+      - Server A (compromised) performs preceding resource reads / tool calls.
+      - Server B (target/pivoted server) performs the sampling or target tool call.
     """
 
-    if case_id == "MPS-029":
-        # Both conditions use the same single-session restart pattern because
-        # MPS-029 tests persistence across a gateway restart, not cross-server
-        # history aggregation.  The session ID is shared across both phases so
-        # get_or_create can reconstruct history from the DB after store.clear().
-        sid = _sid("mps029")
-        session = await _get_session(store, sid)
-        session.verified_capabilities = ["resources", "sampling", "tools"]
-        for _ in range(read_count):
-            engine.evaluate(_req("resources/read", {"name": "s1.txt"}), session)
-        # Drain BEFORE clear — guarantees SQLite has the rows.
-        await _drain_tasks()
-        store.clear()
-        session = await _get_session(store, sid)
-        session.verified_capabilities = ["resources", "sampling", "tools"]
-        assert len(session.call_history) >= read_count, (
-            f"MPS-029: DB reconstruction failed — expected >={read_count} history rows, "
-            f"got {len(session.call_history)}"
-        )
-        result = engine.evaluate(_req("sampling/createMessage", {}), session)
-        await _drain_tasks()
-        return not result.allowed
-
-    # --- All other cases (MPS-026, MPS-027, MPS-030) ---
-    # Condition A: isolated per-server sessions; Condition B: shared client session.
     session_id_A = "serverA"               if condition == "A" else "global_client_session"
     session_id_B = "serverB"               if condition == "A" else "global_client_session"
-
-    # Stage 1: Server A performs reads.
     session_A = await _get_session(store, session_id_A)
     session_A.verified_capabilities = ["resources", "sampling", "tools"]
     if condition == "B":
         session_A.server_id = "serverA"
 
-    for _ in range(read_count):
-        engine.evaluate(_req("resources/read", {"name": "data.txt"}), session_A)
+    if case_id == "MPS-052":
+        # Write-after-read pattern on filesystem-server
+        session_A.server_id = "filesystem-server"
+        req_read = _req("tools/call", {"name": "read_file", "arguments": {"path": "/etc/passwd"}})
+        engine.evaluate(req_read, session_A)
 
-    # Drain before fetching session_B so all of session_A's writes are in the DB.
-    # This matters for Condition B (same session ID) where get_or_create would
-    # return a stale in-memory object if writes are still pending.
-    await _drain_tasks()
+        await _drain_tasks()
+        session_B = await _get_session(store, session_id_B)
+        session_B.verified_capabilities = ["resources", "sampling", "tools"]
+        session_B.server_id = "filesystem-server"
+        req_write = _req("tools/call", {"name": "write_file", "arguments": {"path": "/tmp/out.txt"}})
+        result = engine.evaluate(req_write, session_B)
+        await _drain_tasks()
+        return not result.allowed
 
-    # Stage 2: Server B attempts sampling (the exfil step).
-    session_B = await _get_session(store, session_id_B)
-    session_B.verified_capabilities = ["resources", "sampling", "tools"]
-    if condition == "B":
-        session_B.server_id = "serverB"
+    elif case_id in ("MPS-063",):
+        # 6 rapid tool calls: 5 on Server A, 6th on Server B
+        tools = ["read_file", "write_file", "list_directory", "read_file", "write_file"]
+        for tool in tools:
+            engine.evaluate(_req("tools/call", {"name": tool, "arguments": {}}), session_A)
+        await _drain_tasks()
+        session_B = await _get_session(store, session_id_B)
+        session_B.verified_capabilities = ["resources", "sampling", "tools"]
+        result = engine.evaluate(_req("tools/call", {"name": "list_directory", "arguments": {}}), session_B)
+        await _drain_tasks()
+        return not result.allowed
 
-    result = engine.evaluate(_req("sampling/createMessage", {}), session_B)
-    await _drain_tasks()
-    return not result.allowed
+    elif case_id in ("MPS-064", "MPS-076"):
+        # 3 sampling calls: 2 on Server A, 3rd on Server B
+        engine.evaluate(_req("sampling/createMessage", {}), session_A)
+        engine.evaluate(_req("sampling/createMessage", {}), session_A)
+        await _drain_tasks()
+        session_B = await _get_session(store, session_id_B)
+        session_B.verified_capabilities = ["resources", "sampling", "tools"]
+        result = engine.evaluate(_req("sampling/createMessage", {}), session_B)
+        await _drain_tasks()
+        return not result.allowed
 
+    elif case_id in ("MPS-067", "MPS-079"):
+        # Tool sequence then sampling: 3 tool calls on Server A, sampling on Server B
+        for tool in ["get_data", "format_data", "analyze"]:
+            engine.evaluate(_req("tools/call", {"name": tool, "arguments": {}}), session_A)
+        await _drain_tasks()
+        session_B = await _get_session(store, session_id_B)
+        session_B.verified_capabilities = ["resources", "sampling", "tools"]
+        result = engine.evaluate(_req("sampling/createMessage", {}), session_B)
+        await _drain_tasks()
+        return not result.allowed
 
-# ---------------------------------------------------------------------------
-# Runner and printer
-# ---------------------------------------------------------------------------
+    else:
+        # Resource reads followed by sampling
+        for i in range(read_count):
+            engine.evaluate(_req("resources/read", {"name": f"file{i}.txt"}), session_A)
+
+        await _drain_tasks()
+
+        session_B = await _get_session(store, session_id_B)
+        session_B.verified_capabilities = ["resources", "sampling", "tools"]
+
+        result = engine.evaluate(_req("sampling/createMessage", {}), session_B)
+        await _drain_tasks()
+        return not result.allowed
 
 def run_ablation() -> dict:
     results = {}
 
     for case_id, desc, read_count in CASES:
-        # Fresh engine per case: PolicyEngine may hold mutable internal state
-        # (nonce cache, rate-limit counters) that would bleed across cases if
-        # a single instance were shared for the entire ablation run.
         engine = PolicyEngine("config/shield_config.json")
 
-        # UUID suffix prevents stale DB files from a prior run being read.
         run_id    = uuid.uuid4().hex[:8]
         db_path_A = f"ablation_condA_{case_id}_{run_id}.db"
         db_path_B = f"ablation_condB_{case_id}_{run_id}.db"
 
-        # Capture loop variables as defaults to avoid late-binding closure bugs.
         async def _run_condition(
             db_path: str,
             condition: str,
@@ -248,24 +236,13 @@ def ablation_results():
 
 
 def test_condition_A_isolated_tracking_misses_cross_server(ablation_results):
-    assert not ablation_results["MPS-026"]["A"], "Condition A should MISS MPS-026"
-    assert not ablation_results["MPS-027"]["A"], "Condition A should MISS MPS-027"
-    assert not ablation_results["MPS-030"]["A"], "Condition A should MISS MPS-030"
+    for case_id in ablation_results:
+        assert not ablation_results[case_id]["A"], f"Condition A should MISS {case_id}"
 
 
 def test_condition_B_unified_tracking_catches_cross_server(ablation_results):
-    assert ablation_results["MPS-026"]["B"], "Condition B should BLOCK MPS-026"
-    assert ablation_results["MPS-027"]["B"], "Condition B should BLOCK MPS-027"
-    assert ablation_results["MPS-030"]["B"], "Condition B should BLOCK MPS-030"
-
-
-def test_mps029_cross_session_restart_blocked_both(ablation_results):
-    # MPS-029 uses store.clear() + get_or_create() inside a single asyncio.run()
-    # scope, with _drain_tasks() before the clear.  This guarantees DB has the
-    # rows before in-memory state is wiped, so history survives the restart on
-    # both condition A and B.
-    assert ablation_results["MPS-029"]["A"], "Condition A should BLOCK MPS-029"
-    assert ablation_results["MPS-029"]["B"], "Condition B should BLOCK MPS-029"
+    for case_id in ablation_results:
+        assert ablation_results[case_id]["B"], f"Condition B should BLOCK {case_id}"
 
 
 def test_print_ablation_results(ablation_results):

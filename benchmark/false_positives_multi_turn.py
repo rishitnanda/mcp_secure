@@ -1,7 +1,3 @@
-"""
-This file isolates the multi-turn false positive cases.
-"""
-
 import copy
 import json
 import os
