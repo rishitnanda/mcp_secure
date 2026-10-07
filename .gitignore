@@ -49,3 +49,7 @@ tbd.md
 draft_v*.pdf
 
 paper/
+
+# MCPTox benchmark data (cloned externally)
+MCPTox-Benchmark/
+benchmark/mcptox/

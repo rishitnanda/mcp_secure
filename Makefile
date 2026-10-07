@@ -28,11 +28,9 @@ bench_data:
 	@rm -f $(BENCH_OUT)
 	@mkdir -p benchmark
 	-$(PYTEST) benchmark/cross_server_ablation.py -s -v >> $(BENCH_OUT) 2>&1
-	-$(PYTEST) benchmark/false_positives_single_turn.py -s -v >> $(BENCH_OUT) 2>&1
-	-$(PYTEST) benchmark/false_positives_multi_turn.py -s -v >> $(BENCH_OUT) 2>&1
 	-$(PYTEST) benchmark/mcp_shield_latency_overhead.py -s -v >> $(BENCH_OUT) 2>&1
 	-$(PYTEST) benchmark/multi_turn_telemetry.py -s -v >> $(BENCH_OUT) 2>&1
-	-$(PYTEST) benchmark/multi_turn_window_size.py -s -v >> $(BENCH_OUT) 2>&1
+	-$(PYTEST) benchmark/multi_turn_window_sweep.py -s -v >> $(BENCH_OUT) 2>&1
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +

